@@ -1,0 +1,23 @@
+# OS generated files #
+######################
+.DS_Store*
+ehthumbs.db
+Icon?
+Thumbs.db
+
+# Gradle specific #
+###################
+.gradle/
+/build/
+
+# IDEA specific #
+#################
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# User specific #
+#################
+/cypher/
+.editorconfig
