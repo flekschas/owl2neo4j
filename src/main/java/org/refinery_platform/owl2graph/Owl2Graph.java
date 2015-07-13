@@ -354,37 +354,55 @@ public class Owl2Graph {
                 .build();
 
         Option owl = Option.builder("o")
-                .required(true)
+                .hasArg()
+                .numberOfArgs(1)
+                .type(String.class)
+                .required()
                 .longOpt("owl")
                 .desc("Path to OWL file")
                 .build();
 
         Option name = Option.builder("n")
-                .required(true)
+                .hasArg()
+                .numberOfArgs(1)
+                .type(String.class)
+                .required()
                 .longOpt("name")
                 .desc("Ontology name (E.g. Gene Ontology)")
                 .build();
 
         Option acronym = Option.builder("a")
-                .required(true)
+                .hasArg()
+                .numberOfArgs(1)
+                .type(String.class)
+                .required()
                 .longOpt("abbreviation")
                 .desc("Ontology abbreviation (E.g. go)")
                 .build();
 
         Option server = Option.builder("s")
-                .required(true)
+                .hasArg()
+                .numberOfArgs(1)
+                .type(String.class)
+                .required()
                 .longOpt("server")
                 .desc("Neo4J server root URL")
                 .build();
 
         Option user = Option.builder("u")
-                .required(true)
+                .hasArg()
+                .numberOfArgs(1)
+                .type(String.class)
+                .required()
                 .longOpt("user")
                 .desc("Neo4J user")
                 .build();
 
         Option password = Option.builder("p")
-                .required(true)
+                .hasArg()
+                .numberOfArgs(1)
+                .type(String.class)
+                .required()
                 .longOpt("password")
                 .desc("Neo4J user password")
                 .build();
