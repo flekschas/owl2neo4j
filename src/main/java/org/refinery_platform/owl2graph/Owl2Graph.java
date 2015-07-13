@@ -63,8 +63,8 @@ public class Owl2Graph {
             HttpResponse<JsonNode> response = Unirest.get(ont.server_root_url).asJson();
             System.out.println("Neo4J status: " + Integer.toString(response.getStatus()));
         } catch (UnirestException e) {
-            System.err.println("Error querying Neo4J server root URL");
-            System.err.println(e.getMessage());
+            print_error("Error querying Neo4J server root URL");
+            print_error(e.getMessage());
             System.exit(1);
         }
 
@@ -73,23 +73,23 @@ public class Owl2Graph {
             HttpResponse<JsonNode> response = Unirest.get(ont.server_root_url + REST_ENDPOINT).asJson();
             System.out.println("REST endpoint status: " + Integer.toString(response.getStatus()));
         } catch (UnirestException e) {
-            System.err.println("Error querying Neo4J REST endpoint");
-            System.err.println(e.getMessage());
+            print_error("Error querying Neo4J REST endpoint");
+            print_error(e.getMessage());
             System.exit(1);
         }
 
         try {
             ont.loadOntology();
-        } catch (OWLException oe) {
-            System.err.println("Error loading the ontology");
-            System.err.println(oe.getMessage());
+        } catch (OWLException e) {
+            print_error("Error loading the ontology");
+            print_error(e.getMessage());
             System.exit(1);
         }
         try {
             ont.importOntology();
         } catch (Exception e) {
-            System.err.println("Error importing the ontology");
-            System.err.println(e.getMessage());
+            print_error("Error importing the ontology");
+            print_error(e.getMessage());
             System.exit(1);
         }
 
@@ -97,8 +97,8 @@ public class Owl2Graph {
         try {
             Unirest.shutdown();
         } catch (Exception e) {
-            System.err.println("Error shutting down Unirest");
-            System.err.println(e.getMessage());
+            print_error("Error shutting down Unirest");
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -238,7 +238,7 @@ public class Owl2Graph {
             }
             commitTransaction();
         } catch (Exception e) {
-            System.err.println(e.getMessage());
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -262,8 +262,8 @@ public class Owl2Graph {
                 this.transaction = location.substring(location.lastIndexOf("/"));
             }
         } catch (Exception e) {
-            System.err.println("Error starting transaction");
-            System.err.println(e.getMessage());
+            print_error("Error starting transaction");
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -275,8 +275,8 @@ public class Owl2Graph {
                     .body("{\"statements\":[]}")
                     .asJson();
         } catch (Exception e) {
-            System.err.println("Error starting transaction");
-            System.err.println(e.getMessage());
+            print_error("Error committing transaction");
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -290,8 +290,8 @@ public class Owl2Graph {
                     .body("{\"statements\":[{\"statement\":\"CREATE (n:" + classLabel + " {name:'" + className + "'})\"}]}")
                     .asJson();
         } catch (UnirestException e) {
-            System.err.println("Error creating a node");
-            System.err.println(e.getMessage());
+            print_error("Error creating a node");
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -305,11 +305,11 @@ public class Owl2Graph {
                               "MATCH (src:" + srcClassName + " {name:'" + srcName + "'}), (dest:" + destClassName + " {name:'" + destName + "'})" +
                               "CREATE (src)-[:`" + relationship + "`]->(dest)" +
                             "\"}" +
-                          "]}")
+                            "]}")
                     .asJson();
         } catch (UnirestException e) {
-            System.err.println("Error creating a relationship");
-            System.err.println(e.getMessage());
+            print_error("Error creating a relationship");
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -325,8 +325,8 @@ public class Owl2Graph {
                             "]}")
                     .asJson();
         } catch (UnirestException e) {
-            System.err.println("Error creating a node property");
-            System.err.println(e.getMessage());
+            print_error("Error creating a node property");
+            print_error(e.getMessage());
             System.exit(1);
         }
     }
@@ -337,9 +337,21 @@ public class Owl2Graph {
      */
     private void parseCommandLineArguments(String[] args)
     {
-        Options options = new Options();
-        OptionGroup info = new OptionGroup();
-        OptionGroup call = new OptionGroup();
+        CommandLine cl;
+
+        Options meta_options = new Options();
+        Options call_options = new Options();
+        Options all_options = new Options();
+
+        Option help = Option.builder("h")
+                .longOpt("help")
+                .desc("Shows this help")
+                .build();
+
+        Option version = Option.builder("v")
+                .longOpt("version")
+                .desc("Show version")
+                .build();
 
         Option owl = Option.builder("o")
                 .required(true)
@@ -377,44 +389,58 @@ public class Owl2Graph {
                 .desc("Neo4J user password")
                 .build();
 
-        Option help = Option.builder("h")
-                .longOpt("help")
-                .desc("Shows this help")
-                .build();
+        all_options.addOption(help);
+        all_options.addOption(version);
+        all_options.addOption(owl);
+        all_options.addOption(name);
+        all_options.addOption(acronym);
+        all_options.addOption(server);
+        all_options.addOption(user);
+        all_options.addOption(password);
 
-        info.addOption(help);
+        meta_options.addOption(help);
+        meta_options.addOption(version);
 
-        call.addOption(owl);
-        call.addOption(server);
-        call.addOption(name);
-        call.addOption(acronym);
-        call.addOption(user);
-        call.addOption(password);
-
-        options.addOptionGroup(info);
-        options.addOptionGroup(call);
-
-        CommandLineParser parser = new DefaultParser();
+        call_options.addOption(owl);
+        call_options.addOption(name);
+        call_options.addOption(acronym);
+        call_options.addOption(server);
+        call_options.addOption(user);
+        call_options.addOption(password);
 
         try {
-            CommandLine cmd = parser.parse(options, args);
-
-            if (cmd.hasOption("h")) {
-                usage(options);
-                System.exit(0);
-            } else  {
-                this.path_to_owl = cmd.getOptionValue("o");
-                this.server_root_url = cmd.getOptionValue("s").substring(0, cmd.getOptionValue("s").length() - (cmd.getOptionValue("s").endsWith("/") ? 1 : 0));
-                this.ontology_name = cmd.getOptionValue("n");
-                this.ontology_acronym = cmd.getOptionValue("a");
-                if (cmd.hasOption("p") && cmd.hasOption("u")) {
-                    this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cmd.getOptionValue("u") + ":" + cmd.getOptionValue("p")).getBytes());
+            // Parse only for meta options, e.g. `-h` and `-v`
+            cl = new DefaultParser().parse(meta_options, args, true);
+            if (cl.getOptions().length > 0) {
+                if (cl.hasOption("h")) {
+                    usage(all_options);
                 }
+                if (cl.hasOption("v")) {
+                    System.out.println("0.0.1");
+                }
+                // Exit the program whenever a meta option was found as meta and call options should be mutually exclusive
+                System.exit(0);
             }
-        } catch (ParseException e) {
-            System.err.println("Error parsing command line options");
-            System.err.println(e.getMessage());
-            usage(options);
+        }  catch (ParseException e) {
+            print_error("Error parsing command line meta options");
+            print_error(e.getMessage());
+            System.out.println("\n");
+            usage(all_options);
+            System.exit(1);
+        }
+
+        try {
+            cl = new DefaultParser().parse(call_options, args);
+            this.path_to_owl = cl.getOptionValue("o");
+            this.server_root_url = cl.getOptionValue("s").substring(0, cl.getOptionValue("s").length() - (cl.getOptionValue("s").endsWith("/") ? 1 : 0));
+            this.ontology_name = cl.getOptionValue("n");
+            this.ontology_acronym = cl.getOptionValue("a");
+            this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
+        }  catch (ParseException e) {
+            print_error("Error parsing command line call options");
+            print_error(e.getMessage());
+            System.out.println("\n");
+            usage(all_options);
             System.exit(1);
         }
     }
@@ -428,5 +454,12 @@ public class Owl2Graph {
 
         HelpFormatter formatter = new HelpFormatter();
         formatter.printHelp("java -jar Owl2Graph.jar", header, options, footer, true);
+    }
+
+    /**
+     * Prints error message in red.
+     */
+    public static void print_error(String message) {
+        System.err.println((char)27 + "[31m" + message + (char)27 + "[0m");
     }
 }
