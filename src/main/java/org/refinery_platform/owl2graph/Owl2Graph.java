@@ -145,6 +145,8 @@ public class Owl2Graph {
             throw new Exception("Ontology is inconsistent");
         }
 
+        // This blog has been heavily inspired by:
+        // http://neo4j.com/blog/and-now-for-something-completely-different-using-owl-with-neo4j/
         try {
             initTransaction();
 
