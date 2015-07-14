@@ -19,6 +19,10 @@ import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.HttpResponse;
 import com.mashape.unirest.http.exceptions.UnirestException;
 
+/** JSON **/
+import org.json.JSONObject;
+import org.json.JSONArray;
+
 
 public class Owl2Graph {
 
@@ -48,6 +52,13 @@ public class Owl2Graph {
     private OWLOntology ontology;
     private IRI documentIRI;
 
+    private Boolean verbose_output = false;
+
+    public static final String ANSI_RESET = "\u001B[0m";
+    public static final String ANSI_RED = "\u001B[31m";
+    public static final String ANSI_GREEN = "\u001B[32m";
+    public static final String ANSI_YELLOW = "\u001B[33m";
+
     public static void main(String[] args) {
         Owl2Graph ont = new Owl2Graph(args);
 
@@ -62,7 +73,7 @@ public class Owl2Graph {
         try {
             HttpResponse<JsonNode> response = Unirest.get(ont.server_root_url).asJson();
             System.out.println("Neo4J status: " + Integer.toString(response.getStatus()));
-        } catch (UnirestException e) {
+        } catch (Exception e) {
             print_error("Error querying Neo4J server root URL");
             print_error(e.getMessage());
             System.exit(1);
@@ -72,7 +83,7 @@ public class Owl2Graph {
         try {
             HttpResponse<JsonNode> response = Unirest.get(ont.server_root_url + REST_ENDPOINT).asJson();
             System.out.println("REST endpoint status: " + Integer.toString(response.getStatus()));
-        } catch (UnirestException e) {
+        } catch (Exception e) {
             print_error("Error querying Neo4J REST endpoint");
             print_error(e.getMessage());
             System.exit(1);
@@ -80,13 +91,15 @@ public class Owl2Graph {
 
         try {
             ont.loadOntology();
-        } catch (OWLException e) {
+            System.out.println("Successfully loaded ontology");
+        } catch (Exception e) {
             print_error("Error loading the ontology");
             print_error(e.getMessage());
             System.exit(1);
         }
         try {
             ont.importOntology();
+            System.out.println("Successfully imported ontology");
         } catch (Exception e) {
             print_error("Error importing the ontology");
             print_error(e.getMessage());
@@ -109,13 +122,12 @@ public class Owl2Graph {
 
     public void loadOntology() throws OWLException {
         this.manager = OWLManager.createOWLOntologyManager();
-        this.documentIRI = IRI.create(this.path_to_owl);
+        this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
 
         System.out.println("Ontology Loaded...");
         System.out.println("Document IRI: " + documentIRI);
-        System.out.println("Ontology    : " + ontology.getOntologyID());
-        System.out.println("Format      : " + manager.getOntologyFormat(ontology));
+        System.out.println("Ontology    : " + ontology.getOntologyID().getOntologyIRI().toString());
     }
 
     private void importOntology() throws Exception
@@ -188,7 +200,7 @@ public class Owl2Graph {
                         indName = this.uniqueClassName(className, indString);
                     }
                     createNode(INDIVIDUAL_NODE_LABEL, indName);
-                    createRelationship(INDIVIDUAL_NODE_LABEL, indName, CLASS_NODE_LABEL, className, "a");
+                    createRelationship(INDIVIDUAL_NODE_LABEL, indName, CLASS_NODE_LABEL, className, "rdf:type");
 
                     for (OWLObjectPropertyExpression objectProperty:
                         ontology.getObjectPropertiesInSignature()) {
@@ -248,18 +260,20 @@ public class Owl2Graph {
     }
 
     private void initTransaction () {
-        HttpResponse<JsonNode> jsonResponse;
-        Headers headers;
-
         // Fire empty statement to initialize transaction
         try {
-            jsonResponse = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT)
+            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT)
                     .body("{\"statements\":[]}")
                     .asJson();
-            headers = jsonResponse.getHeaders();
+            Headers headers = response.getHeaders();
+            String location = "";
             if (headers.containsKey("location")) {
-                String location = headers.get("location").toString();
-                this.transaction = location.substring(location.lastIndexOf("/"));
+                location = headers.get("location").toString();
+                this.transaction = location.substring(location.lastIndexOf("/"), location.length() -1);
+                System.out.println("Transaction Sting: '" + this.transaction + "'");
+            }
+            if (this.verbose_output) {
+                System.out.println("Transaction initialized. Commit at " + location + " [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
             }
         } catch (Exception e) {
             print_error("Error starting transaction");
@@ -271,9 +285,12 @@ public class Owl2Graph {
     private void commitTransaction () {
         // Fire empty statement to initialize transaction
         try {
-            Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction + "/commit")
+            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction + "/commit")
                     .body("{\"statements\":[]}")
                     .asJson();
+            if (this.verbose_output) {
+                System.out.println("Transaction committed. [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
+            }
         } catch (Exception e) {
             print_error("Error committing transaction");
             print_error(e.getMessage());
@@ -286,9 +303,12 @@ public class Owl2Graph {
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
         try {
-            Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"CREATE (n:" + classLabel + " {name:'" + className + "'})\"}]}")
+            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
+                    .body("{\"statements\":[{\"statement\":\"MERGE (n:" + classLabel + " {name:'" + className + "'});\"}]}")
                     .asJson();
+            if (this.verbose_output) {
+                System.out.println("Node (" + classLabel + ":" + className + ") created. [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
+            }
         } catch (UnirestException e) {
             print_error("Error creating a node");
             print_error(e.getMessage());
@@ -296,17 +316,15 @@ public class Owl2Graph {
         }
     }
 
-    private void createRelationship (String srcClassName, String srcName, String destClassName, String destName, String relationship) {
+    private void createRelationship (String srcLabel, String srcName, String destLabel, String destName, String relationship) {
         // Example: cypher/createRelationship.cql
         try {
-            Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[" +
-                            "{\"statement\":\"" +
-                              "MATCH (src:" + srcClassName + " {name:'" + srcName + "'}), (dest:" + destClassName + " {name:'" + destName + "'})" +
-                              "CREATE (src)-[:`" + relationship + "`]->(dest)" +
-                            "\"}" +
-                            "]}")
+            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
+                    .body("{\"statements\":[{\"statement\":\"MATCH (src:" + srcLabel + " {name:'" + srcName + "'}), (dest:" + destLabel + " {name:'" + destName + "'}) MERGE (src)-[:`" + relationship + "`]->(dest);\"}]}")
                     .asJson();
+            if (this.verbose_output) {
+                System.out.println("Relationship (" + srcLabel + ":" + srcName + ")-[" + relationship +"]->(" + destLabel + ":" + destName + ") created. [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
+            }
         } catch (UnirestException e) {
             print_error("Error creating a relationship");
             print_error(e.getMessage());
@@ -317,13 +335,12 @@ public class Owl2Graph {
     private void setProperty (String classLabel, String className, String propertyName, String propertyValue) {
         // Example: cypher/setProperty.cql
         try {
-            Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[" +
-                            "{\"statement\":\"" +
-                              "MATCH (n:" + classLabel + " {uri:" + className + "}) SET n." + propertyName + " = '" + propertyValue + "'" +
-                            "\"}" +
-                            "]}")
+            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
+                    .body("{\"statements\":[{\"statement\":\"MATCH (n:" + classLabel + " {name:'" + className + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';\"}]}")
                     .asJson();
+            if (this.verbose_output) {
+                System.out.println("Property(" + propertyName + ":" + propertyValue + ") for Node(" + classLabel + ":" + className + ") set. [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
+            }
         } catch (UnirestException e) {
             print_error("Error creating a node property");
             print_error(e.getMessage());
@@ -348,9 +365,14 @@ public class Owl2Graph {
                 .desc("Shows this help")
                 .build();
 
-        Option version = Option.builder("v")
+        Option version = Option.builder("version")
                 .longOpt("version")
                 .desc("Show version")
+                .build();
+
+        Option verbosity = Option.builder("v")
+                .longOpt("verbosity")
+                .desc("Activate verbose output")
                 .build();
 
         Option owl = Option.builder("o")
@@ -409,6 +431,7 @@ public class Owl2Graph {
 
         all_options.addOption(help);
         all_options.addOption(version);
+        all_options.addOption(verbosity);
         all_options.addOption(owl);
         all_options.addOption(name);
         all_options.addOption(acronym);
@@ -425,6 +448,7 @@ public class Owl2Graph {
         call_options.addOption(server);
         call_options.addOption(user);
         call_options.addOption(password);
+        call_options.addOption(verbosity);
 
         try {
             // Parse only for meta options, e.g. `-h` and `-v`
@@ -433,7 +457,7 @@ public class Owl2Graph {
                 if (cl.hasOption("h")) {
                     usage(all_options);
                 }
-                if (cl.hasOption("v")) {
+                if (cl.hasOption("version")) {
                     System.out.println("0.0.1");
                 }
                 // Exit the program whenever a meta option was found as meta and call options should be mutually exclusive
@@ -454,6 +478,9 @@ public class Owl2Graph {
             this.ontology_name = cl.getOptionValue("n");
             this.ontology_acronym = cl.getOptionValue("a");
             this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
+            if (cl.hasOption("v")) {
+                this.verbose_output = true;
+            }
         }  catch (ParseException e) {
             print_error("Error parsing command line call options");
             print_error(e.getMessage());
@@ -478,6 +505,6 @@ public class Owl2Graph {
      * Prints error message in red.
      */
     public static void print_error(String message) {
-        System.err.println((char)27 + "[31m" + message + (char)27 + "[0m");
+        System.err.println(ANSI_RED + message + ANSI_RESET);
     }
 }
