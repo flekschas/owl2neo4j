@@ -160,14 +160,21 @@ public class Owl2Graph {
 
             for (OWLClass c :ontology.getClassesInSignature(true)) {
                 String classString = c.toString();
-                String className = "";
+                String className = classString;
                 if (classString.contains("#")) {
-                    classString = classString.substring(
-                        classString.indexOf("#") + 1,classString.lastIndexOf(">"));
-                    className = this.uniqueClassName(this.ontology_acronym, classString);
+                    className = this.uniqueClassName(
+                        this.ontology_acronym,
+                        classString.substring(
+                            classString.indexOf("#") + 1,
+                            classString.lastIndexOf(">")
+                        )
+                    );
                 }
 
                 createNode(CLASS_NODE_LABEL, className);
+
+                // Get properties of that class
+
 
                 NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
 
@@ -179,12 +186,15 @@ public class Owl2Graph {
                         OWLClassExpression parent =
                             parentOWLNode.getRepresentativeElement();
                         String parentString = parent.toString();
-                        String parentName = "";
+                        String parentName = parentString;
                         if (parentString.contains("#")) {
-                            parentString = parentString.substring(
-                                parentString.indexOf("#")+1,
-                                parentString.lastIndexOf(">"));
-                            parentName = this.uniqueClassName(this.ontology_acronym, parentString);
+                            parentName = this.uniqueClassName(
+                                this.ontology_acronym,
+                                parentString.substring(
+                                    parentString.indexOf("#") + 1,
+                                    parentString.lastIndexOf(">")
+                                )
+                            );
                         }
                         createNode(CLASS_NODE_LABEL, parentName);
                         createRelationship(CLASS_NODE_LABEL, className, CLASS_NODE_LABEL, parentName, "rdfs:subClassOf");
@@ -195,11 +205,15 @@ public class Owl2Graph {
                     : reasoner.getInstances(c, true)) {
                     OWLNamedIndividual i = in.getRepresentativeElement();
                     String indString = i.toString();
-                    String indName = "";
+                    String indName = indString;
                     if (indString.contains("#")) {
-                        indString = indString.substring(
-                            indString.indexOf("#")+1,indString.lastIndexOf(">"));
-                        indName = this.uniqueClassName(className, indString);
+                        indName = this.uniqueClassName(
+                            className,
+                            indString.substring(
+                                indString.indexOf("#") + 1,
+                                indString.lastIndexOf(">")
+                            )
+                        );
                     }
                     createNode(INDIVIDUAL_NODE_LABEL, indName);
                     createRelationship(INDIVIDUAL_NODE_LABEL, indName, CLASS_NODE_LABEL, className, "rdf:type");
@@ -236,11 +250,13 @@ public class Owl2Graph {
                     for (OWLDataPropertyExpression dataProperty:
                         ontology.getDataPropertiesInSignature()) {
                         for (OWLLiteral object: reasoner.getDataPropertyValues(
-                            i, dataProperty.asOWLDataProperty())) {
+                                i, dataProperty.asOWLDataProperty())) {
                             String propertyString =
                                 dataProperty.asOWLDataProperty().toString();
-                            propertyString = propertyString.substring(propertyString.indexOf("#")+1,
-                                    propertyString.lastIndexOf(">"));
+                            propertyString = propertyString.substring(
+                                propertyString.indexOf("#") + 1,
+                                propertyString.lastIndexOf(">")
+                            );
                             String propertyValue = object.toString();
                             String propertyName = uniqueClassName(this.ontology_acronym, propertyString);
 
