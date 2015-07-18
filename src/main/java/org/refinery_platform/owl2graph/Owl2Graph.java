@@ -23,6 +23,8 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
+import java.util.concurrent.TimeUnit;
+
 
 public class Owl2Graph {
 
@@ -51,6 +53,7 @@ public class Owl2Graph {
     private OWLOntologyManager manager;
     private OWLOntology ontology;
     private IRI documentIRI;
+    private OWLDataFactory datafactory;
 
     private Boolean verbose_output = false;
 
@@ -58,6 +61,8 @@ public class Owl2Graph {
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_YELLOW = "\u001B[33m";
+
+    public static final String VERSION = "0.1.0";
 
     public static void main(String[] args) {
         Owl2Graph ont = new Owl2Graph(args);
@@ -89,16 +94,30 @@ public class Owl2Graph {
             System.exit(1);
         }
 
+        long loadTimeSec = -1;
+        double loadTimeMin = -1.0;
+
         try {
+            long start = System.nanoTime();
             ont.loadOntology();
+            long end = System.nanoTime();
+            loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
+            loadTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
             System.out.println("Successfully loaded ontology");
         } catch (Exception e) {
             print_error("Error loading the ontology");
             print_error(e.getMessage());
             System.exit(1);
         }
+
+        long importTimeSec = -1;
+        double importTimeMin = -1;
         try {
+            long start = System.nanoTime();
             ont.importOntology();
+            long end = System.nanoTime();
+            importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
+            importTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
             System.out.println("Successfully imported ontology");
         } catch (Exception e) {
             print_error("Error importing the ontology");
@@ -114,6 +133,13 @@ public class Owl2Graph {
             print_error(e.getMessage());
             System.exit(1);
         }
+
+        // Print some performance related numbers
+        if (ont.verbose_output) {
+            System.out.println("-----");
+            System.out.println("Load time:   " + Double.toString(loadTimeMin) + "min (" + Long.toString(loadTimeSec) + "s)");
+            System.out.println("Import time: " + Double.toString(importTimeMin) + "min (" + Long.toString(importTimeSec) + "s)");
+        }
     }
 
     public Owl2Graph(String[] args) {
@@ -124,6 +150,7 @@ public class Owl2Graph {
         this.manager = OWLManager.createOWLOntologyManager();
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
+        this.datafactory = OWLManager.getOWLDataFactory();
 
         System.out.println("Ontology Loaded...");
         System.out.println("Document IRI: " + documentIRI);
@@ -145,7 +172,7 @@ public class Owl2Graph {
             throw new Exception("Ontology is inconsistent");
         }
 
-        // This blog has been heavily inspired by:
+        // This blog is heavily inspired by:
         // http://neo4j.com/blog/and-now-for-something-completely-different-using-owl-with-neo4j/
         try {
             initTransaction();
@@ -153,6 +180,7 @@ public class Owl2Graph {
             // Create a node for the ontology
             createNode(ONTOLOGY_NODE_LABEL, this.ontology_acronym);
             setProperty(ONTOLOGY_NODE_LABEL, this.ontology_acronym, "rdfs:label", this.ontology_name);
+            setProperty(ONTOLOGY_NODE_LABEL, this.ontology_acronym, "acronym", this.ontology_acronym);
             setProperty(ONTOLOGY_NODE_LABEL, this.ontology_acronym, "uri", ontology.getOntologyID().getOntologyIRI().toString());
 
             // Create root node "owl:Thing"
@@ -173,8 +201,15 @@ public class Owl2Graph {
 
                 createNode(CLASS_NODE_LABEL, className);
 
-                // Get properties of that class
-
+                // Get properties/annotations of that class
+                for (OWLAnnotation annotation : c.getAnnotations(ontology, datafactory.getRDFSLabel())) {
+                    if (annotation.getValue() instanceof OWLLiteral) {
+                        OWLLiteral val = (OWLLiteral) annotation.getValue();
+                        // Store property
+                        setProperty(CLASS_NODE_LABEL, className, "rdfs:label", val.getLiteral());
+                        setProperty(CLASS_NODE_LABEL, className, "labelLang", val.getLang());
+                    }
+                }
 
                 NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
 
@@ -273,6 +308,39 @@ public class Owl2Graph {
         }
     }
 
+    public String extractClassName (String ontAcronym, String classString) {
+        String className = classString;
+        // First extract the substring after the last slash to avoid possible conflicts
+        if (classString.contains("/")) {
+            String tmp = classString.substring(classString.lastIndexOf("/") + 1);
+            if (tmp.length() == 0) {
+                tmp = classString.substring(0, classString.lastIndexOf("/"));
+                tmp = classString.substring(classString.lastIndexOf("/") + 1);
+            }
+            if (tmp.length() > 0) {
+                className = tmp;
+            }
+        }
+        // OWL IDs start with `#` so we extract everything after that.
+        if (classString.contains("#")) {
+            className = classString.substring(
+                classString.indexOf("#") + 1,
+                classString.lastIndexOf(">")
+            );
+        }
+        // If the string contains an underscore than it is most likely an OBO ontology converted to OWL. The prefix is
+        // different in this case. We will use the ID space of OBO.
+        // For more details: http://www.obofoundry.org/id-policy.shtml
+        if (classString.contains("_")) {
+            String idSpace = classString.substring(
+                0,
+                classString.indexOf("_")
+            );
+            className = classString.substring(classString.indexOf("_") + 1);
+        }
+        return ontAcronym + ":" + className;
+    }
+
     public String uniqueClassName (String ontAcronym, String className) {
         return ontAcronym + ":" + className;
     }
@@ -322,7 +390,7 @@ public class Owl2Graph {
         // Example: cypher/createClass.cql
         try {
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"MERGE (n:" + classLabel + " {name:'" + className + "'});\"}]}")
+                .body("{\"statements\":[{\"statement\":\"MERGE (n:" + classLabel + ":" + this.ontology_acronym + " {name:'" + className + "'});\"}]}")
                     .asJson();
             if (this.verbose_output) {
                 System.out.println("Node (" + classLabel + ":" + className + ") created. [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
@@ -379,73 +447,79 @@ public class Owl2Graph {
         Options all_options = new Options();
 
         Option help = Option.builder("h")
-                .longOpt("help")
-                .desc("Shows this help")
-                .build();
+            .longOpt("help")
+            .desc("Shows this help")
+            .build();
 
-        Option version = Option.builder("version")
-                .longOpt("version")
-                .desc("Show version")
-                .build();
+        Option version = Option.builder()
+            .longOpt("version")
+            .desc("Show version")
+            .build();
 
         Option verbosity = Option.builder("v")
-                .longOpt("verbosity")
-                .desc("Activate verbose output")
-                .build();
+            .longOpt("verbosity")
+            .desc("Verbose output")
+            .build();
 
         Option owl = Option.builder("o")
-                .hasArg()
-                .numberOfArgs(1)
-                .type(String.class)
-                .required()
-                .longOpt("owl")
-                .desc("Path to OWL file")
-                .build();
+            .argName("Path")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("owl")
+            .desc("Path to OWL file")
+            .build();
 
         Option name = Option.builder("n")
-                .hasArg()
-                .numberOfArgs(1)
-                .type(String.class)
-                .required()
-                .longOpt("name")
-                .desc("Ontology name (E.g. Gene Ontology)")
-                .build();
+            .argName("String")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("name")
+            .desc("Ontology name (E.g. Gene Ontology)")
+            .build();
 
         Option acronym = Option.builder("a")
-                .hasArg()
-                .numberOfArgs(1)
-                .type(String.class)
-                .required()
-                .longOpt("abbreviation")
-                .desc("Ontology abbreviation (E.g. go)")
-                .build();
+            .argName("String")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("abbreviation")
+            .desc("Ontology abbreviation (E.g. go)")
+            .build();
 
         Option server = Option.builder("s")
-                .hasArg()
-                .numberOfArgs(1)
-                .type(String.class)
-                .required()
-                .longOpt("server")
-                .desc("Neo4J server root URL")
-                .build();
+            .argName("URL")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("server")
+            .desc("Neo4J server root URL")
+            .build();
 
         Option user = Option.builder("u")
-                .hasArg()
-                .numberOfArgs(1)
-                .type(String.class)
-                .required()
-                .longOpt("user")
-                .desc("Neo4J user")
-                .build();
+            .argName("String")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("user")
+            .desc("Neo4J user name")
+            .build();
 
         Option password = Option.builder("p")
-                .hasArg()
-                .numberOfArgs(1)
-                .type(String.class)
-                .required()
-                .longOpt("password")
-                .desc("Neo4J user password")
-                .build();
+            .argName("String")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("password")
+            .desc("Neo4J user password")
+            .build();
 
         all_options.addOption(help);
         all_options.addOption(version);
@@ -476,7 +550,7 @@ public class Owl2Graph {
                     usage(all_options);
                 }
                 if (cl.hasOption("version")) {
-                    System.out.println("0.0.1");
+                    System.out.println(VERSION);
                 }
                 // Exit the program whenever a meta option was found as meta and call options should be mutually exclusive
                 System.exit(0);
