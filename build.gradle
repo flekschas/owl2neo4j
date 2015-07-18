@@ -1,7 +1,7 @@
 apply plugin: 'java'
 apply plugin: 'idea'
 
-version = '0.0.1'
+version = '0.1.0'
 
 repositories {
     mavenCentral()
@@ -18,8 +18,11 @@ dependencies {
 }
 
 jar {
+    archiveName = baseName + '.' + extension
     // Create a 'fat' jar by including all dependencies
-    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
+    from {
+        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
+    }
     manifest {
         attributes('Main-Class': 'org.refinery_platform.owl2graph.Owl2Graph',
                    'Implementation-Title': 'OWL 2 Graph',
