@@ -165,10 +165,7 @@ public class Owl2Graph {
         OWLReasoner reasoner = reasonerFactory.createReasoner(ontology, config);
         reasoner.precomputeInferences();
 
-        // OWLReasoner reasoner = new Reasoner(ontology);
-
         if (!reasoner.isConsistent()) {
-            //throw your exception of choice here
             throw new Exception("Ontology is inconsistent");
         }
 
