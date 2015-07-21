@@ -19,6 +19,5 @@ Thumbs.db
 
 # User specific #
 #################
-/cypher/
 .editorconfig
 *.log*
