@@ -1,4 +1,4 @@
-# OWL 2 Neo4J
+# OWL 2 Neo4J [![Build Status](https://travis-ci.org/flekschas/owl2neo4j.svg?branch=develop)](https://travis-ci.org/flekschas/owl2neo4j)
 
 Convert [OWL](owl) to labeled property graph and import into [Neo4J](neo4j).
 
