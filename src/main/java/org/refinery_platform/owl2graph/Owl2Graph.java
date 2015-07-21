@@ -266,19 +266,22 @@ public class Owl2Graph {
                 for (OWLAnnotation annotation : c.getAnnotations(ontology, datafactory.getRDFSLabel())) {
                     if (annotation.getValue() instanceof OWLLiteral) {
                         OWLLiteral val = (OWLLiteral) annotation.getValue();
-                        // Store property
+                        // Store escaped literal
                         setProperty(
                             CLASS_NODE_LABEL,
                             classUri,
                             "rdfs:label",
-                            val.getLiteral()
+                            val.getLiteral().replace("'", "\\'")
                         );
-                        setProperty(
-                            CLASS_NODE_LABEL,
-                            classUri,
-                            "labelLang",
-                            val.getLang()
-                        );
+                        String lang = val.getLang();
+                        if (lang.length() > 0) {
+                            setProperty(
+                                CLASS_NODE_LABEL,
+                                classUri,
+                                "labelLang",
+                                val.getLang()
+                            );
+                        }
                     }
                 }
 
@@ -368,7 +371,7 @@ public class Owl2Graph {
                             );
                         }
                     }
-                    for (OWLDataPropertyExpression dataProperty:
+                    for (OWLDataPropertyExpression dataProperty :
                         ontology.getDataPropertiesInSignature()) {
                         for (OWLLiteral object: reasoner.getDataPropertyValues(
                                 i, dataProperty.asOWLDataProperty())) {
@@ -526,7 +529,7 @@ public class Owl2Graph {
                 JSONObject error = (JSONObject) errors.get(0);
                 String errorMsg = error.get("message").toString();
                 if (this.verbose_output) {
-                    errorMsg = errorMsg + "\n" + error.get("stackTrace").toString();
+                    errorMsg = response.getBody().toString();
                 }
                 throw new Exception(errorMsg);
             }
