@@ -23,7 +23,11 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
+import java.io.IOException;
 import java.util.concurrent.TimeUnit;
+import java.util.logging.FileHandler;
+import java.util.logging.Logger;
+import java.util.logging.SimpleFormatter;
 
 
 public class Owl2Graph {
@@ -33,7 +37,8 @@ public class Owl2Graph {
 
     public static String ROOT_ONTOLOGY = "owl";
     public static String ROOT_CLASS = "Thing";
-    public static String ROOT_CLASS_NAME = ROOT_ONTOLOGY + ":" + ROOT_CLASS;
+    public static String ROOT_CLASS_ONT_ID = ROOT_ONTOLOGY + ":" + ROOT_CLASS;
+    public static String ROOT_CLASS_URI = "http://www.w3.org/2002/07/owl#" + ROOT_CLASS;
 
     // Graph related nodes
     private static String CLASS_NODE_LABEL = "Class";
@@ -54,7 +59,10 @@ public class Owl2Graph {
     private OWLOntology ontology;
     private IRI documentIRI;
     private OWLDataFactory datafactory;
+    private String ontUri;
 
+    private Logger cqlLogger;
+    private FileHandler fh;
     private Boolean verbose_output = false;
 
     public static final String ANSI_RESET = "\u001B[0m";
@@ -72,12 +80,18 @@ public class Owl2Graph {
         // Yields better performance and reduces memory load on the Neo4J server
         // http://neo4j.com/docs/stable/rest-api-streaming.html
         Unirest.setDefaultHeader("X-Stream", "true");
-        Unirest.setDefaultHeader("Authorization", ont.neo4j_authentication_header);
+        Unirest.setDefaultHeader(
+            "Authorization", ont.neo4j_authentication_header
+        );
 
         // Test if server is available
         try {
-            HttpResponse<JsonNode> response = Unirest.get(ont.server_root_url).asJson();
-            System.out.println("Neo4J status: " + Integer.toString(response.getStatus()));
+            HttpResponse<JsonNode> response = Unirest.get(
+                ont.server_root_url
+            ).asJson();
+            System.out.println(
+                "Neo4J status: " + Integer.toString(response.getStatus())
+            );
         } catch (Exception e) {
             print_error("Error querying Neo4J server root URL");
             print_error(e.getMessage());
@@ -86,8 +100,13 @@ public class Owl2Graph {
 
         // Try authentication
         try {
-            HttpResponse<JsonNode> response = Unirest.get(ont.server_root_url + REST_ENDPOINT).asJson();
-            System.out.println("REST endpoint status: " + Integer.toString(response.getStatus()));
+            HttpResponse<JsonNode> response = Unirest.get(
+                ont.server_root_url + REST_ENDPOINT
+            ).asJson();
+            System.out.println(
+                "REST endpoint status: " +
+                Integer.toString(response.getStatus())
+            );
         } catch (Exception e) {
             print_error("Error querying Neo4J REST endpoint");
             print_error(e.getMessage());
@@ -137,8 +156,19 @@ public class Owl2Graph {
         // Print some performance related numbers
         if (ont.verbose_output) {
             System.out.println("-----");
-            System.out.println("Load time:   " + Double.toString(loadTimeMin) + "min (" + Long.toString(loadTimeSec) + "s)");
-            System.out.println("Import time: " + Double.toString(importTimeMin) + "min (" + Long.toString(importTimeSec) + "s)");
+            System.out.println(
+                "Load time:   " +
+                Double.toString(loadTimeMin) +
+                "min (" +
+                Long.toString(loadTimeSec) +
+                "s)"
+            );
+            System.out.println(
+                "Import time: " +
+                Double.toString(importTimeMin) +
+                "min (" +
+                Long.toString(importTimeSec) +
+                "s)");
         }
     }
 
@@ -151,22 +181,41 @@ public class Owl2Graph {
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
         this.datafactory = OWLManager.getOWLDataFactory();
+        this.ontUri = ontology.getOntologyID().getOntologyIRI().toString();
 
         System.out.println("Ontology Loaded...");
         System.out.println("Document IRI: " + documentIRI);
-        System.out.println("Ontology    : " + ontology.getOntologyID().getOntologyIRI().toString());
+        System.out.println("Ontology    : " + this.ontUri);
     }
 
     private void importOntology() throws Exception
     {
         OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
         ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor();
-        OWLReasonerConfiguration config = new SimpleConfiguration(progressMonitor);
+        OWLReasonerConfiguration config = new SimpleConfiguration(
+            progressMonitor
+        );
         OWLReasoner reasoner = reasonerFactory.createReasoner(ontology, config);
         reasoner.precomputeInferences();
 
         if (!reasoner.isConsistent()) {
             throw new Exception("Ontology is inconsistent");
+        }
+
+        // Init Cypher logger
+        this.cqlLogger = Logger.getLogger("Cypher:" + this.ontology_acronym);
+        if (this.verbose_output) {
+            try {
+                // Create at most five 10MB logger.
+                this.fh = new FileHandler("Cypher log for " + this.ontology_acronym + ".log", 10485760, 5);
+                this.cqlLogger.addHandler(fh);
+                SimpleFormatter formatter = new SimpleFormatter();
+                fh.setFormatter(formatter);
+            } catch (SecurityException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         // This blog is heavily inspired by:
@@ -175,61 +224,95 @@ public class Owl2Graph {
             initTransaction();
 
             // Create a node for the ontology
-            createNode(ONTOLOGY_NODE_LABEL, this.ontology_acronym);
-            setProperty(ONTOLOGY_NODE_LABEL, this.ontology_acronym, "rdfs:label", this.ontology_name);
-            setProperty(ONTOLOGY_NODE_LABEL, this.ontology_acronym, "acronym", this.ontology_acronym);
-            setProperty(ONTOLOGY_NODE_LABEL, this.ontology_acronym, "uri", ontology.getOntologyID().getOntologyIRI().toString());
+            createNode(
+                ONTOLOGY_NODE_LABEL,
+                this.ontology_acronym,
+                this.ontUri
+            );
+            setProperty(
+                ONTOLOGY_NODE_LABEL,
+                this.ontUri,
+                "rdfs:label",
+                this.ontology_name
+            );
+            setProperty(
+                ONTOLOGY_NODE_LABEL,
+                this.ontUri,
+                "acronym",
+                this.ontology_acronym
+            );
+            setProperty(
+                ONTOLOGY_NODE_LABEL,
+                this.ontUri,
+                "uri",
+                ontology.getOntologyID().getOntologyIRI().toString()
+            );
 
             // Create root node "owl:Thing"
-            createNode(CLASS_NODE_LABEL, ROOT_CLASS_NAME);
+            createNode(
+                CLASS_NODE_LABEL,
+                ROOT_CLASS_ONT_ID,
+                ROOT_CLASS_URI
+            );
 
             for (OWLClass c :ontology.getClassesInSignature(true)) {
                 String classString = c.toString();
-                String className = classString;
-                if (classString.contains("#")) {
-                    className = this.uniqueClassName(
-                        this.ontology_acronym,
-                        classString.substring(
-                            classString.indexOf("#") + 1,
-                            classString.lastIndexOf(">")
-                        )
-                    );
-                }
+                String classUri = this.extractUri(classString);
+                String classOntID = this.getOntID(classUri);
 
-                createNode(CLASS_NODE_LABEL, className);
+                createNode(CLASS_NODE_LABEL, classOntID, classUri);
 
                 // Get properties/annotations of that class
                 for (OWLAnnotation annotation : c.getAnnotations(ontology, datafactory.getRDFSLabel())) {
                     if (annotation.getValue() instanceof OWLLiteral) {
                         OWLLiteral val = (OWLLiteral) annotation.getValue();
                         // Store property
-                        setProperty(CLASS_NODE_LABEL, className, "rdfs:label", val.getLiteral());
-                        setProperty(CLASS_NODE_LABEL, className, "labelLang", val.getLang());
+                        setProperty(
+                            CLASS_NODE_LABEL,
+                            classUri,
+                            "rdfs:label",
+                            val.getLiteral()
+                        );
+                        setProperty(
+                            CLASS_NODE_LABEL,
+                            classUri,
+                            "labelLang",
+                            val.getLang()
+                        );
                     }
                 }
 
                 NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
 
                 if (superclasses.isEmpty()) {
-                    createRelationship(CLASS_NODE_LABEL, className, CLASS_NODE_LABEL, ROOT_CLASS_NAME, "rdfs:subClassOf");
+                    createRelationship(
+                        CLASS_NODE_LABEL,
+                        classUri,
+                        CLASS_NODE_LABEL,
+                        ROOT_CLASS_URI,
+                        "rdfs:subClassOf"
+                    );
                 } else {
                     for (org.semanticweb.owlapi.reasoner.Node<OWLClass>
                         parentOWLNode: superclasses) {
                         OWLClassExpression parent =
                             parentOWLNode.getRepresentativeElement();
                         String parentString = parent.toString();
-                        String parentName = parentString;
-                        if (parentString.contains("#")) {
-                            parentName = this.uniqueClassName(
-                                this.ontology_acronym,
-                                parentString.substring(
-                                    parentString.indexOf("#") + 1,
-                                    parentString.lastIndexOf(">")
-                                )
-                            );
-                        }
-                        createNode(CLASS_NODE_LABEL, parentName);
-                        createRelationship(CLASS_NODE_LABEL, className, CLASS_NODE_LABEL, parentName, "rdfs:subClassOf");
+                        String parentUri = this.extractUri(parentString);
+                        String parentOntID = this.getOntID(parentUri);
+
+                        createNode(
+                            CLASS_NODE_LABEL,
+                            parentOntID,
+                            parentUri
+                        );
+                        createRelationship(
+                            CLASS_NODE_LABEL,
+                            classUri,
+                            CLASS_NODE_LABEL,
+                            parentUri,
+                            "rdfs:subClassOf"
+                        );
                     }
                 }
 
@@ -237,18 +320,21 @@ public class Owl2Graph {
                     : reasoner.getInstances(c, true)) {
                     OWLNamedIndividual i = in.getRepresentativeElement();
                     String indString = i.toString();
-                    String indName = indString;
-                    if (indString.contains("#")) {
-                        indName = this.uniqueClassName(
-                            className,
-                            indString.substring(
-                                indString.indexOf("#") + 1,
-                                indString.lastIndexOf(">")
-                            )
-                        );
-                    }
-                    createNode(INDIVIDUAL_NODE_LABEL, indName);
-                    createRelationship(INDIVIDUAL_NODE_LABEL, indName, CLASS_NODE_LABEL, className, "rdf:type");
+                    String indUri = this.extractUri(indString);
+                    String indOntID = this.getOntID(indUri);
+
+                    createNode(
+                        INDIVIDUAL_NODE_LABEL,
+                        indOntID,
+                        indUri
+                    );
+                    createRelationship(
+                        INDIVIDUAL_NODE_LABEL,
+                        indUri,
+                        CLASS_NODE_LABEL,
+                        classUri,
+                        "rdf:type"
+                    );
 
                     for (OWLObjectPropertyExpression objectProperty:
                         ontology.getObjectPropertiesInSignature()) {
@@ -258,25 +344,28 @@ public class Owl2Graph {
                         objectProperty)) {
                             // Get Relationship name
                             String relString = objectProperty.toString();
-                            relString = relString.substring(relString.indexOf("#")+1,
-                                    relString.lastIndexOf(">"));
-                            String relName = uniqueClassName(this.ontology_acronym, relString);
+                            String relUri = this.extractUri(relString);
+                            String relOntID = this.getOntID(relUri);
 
                             // Create a meta node for the potentially new Relationship
-                            createNode(RELATIONSHIP_NODE_LABEL, relName);
+                            createNode(
+                                RELATIONSHIP_NODE_LABEL,
+                                relOntID,
+                                relUri
+                            );
 
                             // Get related Individual
                             String relIndString = object.getRepresentativeElement().toString();
-                            relIndString = relIndString.substring(relIndString.indexOf("#") + 1,
-                                    relIndString.lastIndexOf(">"));
-                            String relIndName = uniqueClassName(INDIVIDUAL_NODE_LABEL, relIndString);
+                            String relIndUri = this.extractUri(relIndString);
 
                             // Connect both individuals
-                            createRelationship(INDIVIDUAL_NODE_LABEL, indName, INDIVIDUAL_NODE_LABEL, relIndName, relName);
-
-                            // Node objectNode = getOrCreateClass(s);
-                            // individualNode.createRelationshipTo(objectNode,
-                            //     DynamicRelationshipType.withName(reltype));
+                            createRelationship(
+                                INDIVIDUAL_NODE_LABEL,
+                                indUri,
+                                INDIVIDUAL_NODE_LABEL,
+                                relIndUri,
+                                relOntID
+                            );
                         }
                     }
                     for (OWLDataPropertyExpression dataProperty:
@@ -285,15 +374,21 @@ public class Owl2Graph {
                                 i, dataProperty.asOWLDataProperty())) {
                             String propertyString =
                                 dataProperty.asOWLDataProperty().toString();
-                            propertyString = propertyString.substring(
-                                propertyString.indexOf("#") + 1,
-                                propertyString.lastIndexOf(">")
-                            );
+                            String propertyUri = this.extractUri(propertyString);
+                            String propertyOntID = this.getOntID(propertyUri);
                             String propertyValue = object.toString();
-                            String propertyName = uniqueClassName(this.ontology_acronym, propertyString);
 
-                            createNode(PROPERTY_NODE_LABEL, propertyName);
-                            setProperty(INDIVIDUAL_NODE_LABEL, indName, propertyName, propertyValue);
+                            createNode(
+                                PROPERTY_NODE_LABEL,
+                                propertyOntID,
+                                propertyUri
+                            );
+                            setProperty(
+                                INDIVIDUAL_NODE_LABEL,
+                                indUri,
+                                propertyOntID,
+                                propertyValue
+                            );
                         }
                     }
                 }
@@ -305,58 +400,104 @@ public class Owl2Graph {
         }
     }
 
-    public String extractClassName (String ontAcronym, String classString) {
-        String className = classString;
-        // First extract the substring after the last slash to avoid possible conflicts
-        if (classString.contains("/")) {
-            String tmp = classString.substring(classString.lastIndexOf("/") + 1);
-            if (tmp.length() == 0) {
-                tmp = classString.substring(0, classString.lastIndexOf("/"));
-                tmp = classString.substring(classString.lastIndexOf("/") + 1);
+    public String extractUri (String classString) {
+        String classUri = classString;
+        int openingAngleBracketPos = classString.indexOf("<");
+        int closingAngleBracketPos = classString.lastIndexOf(">");
+        try {
+            if (openingAngleBracketPos >= 0 && closingAngleBracketPos >= 0) {
+                classUri = classString.substring(
+                    classString.indexOf("<") + 1,
+                    classString.lastIndexOf(">")
+                );
             }
-            if (tmp.length() > 0) {
-                className = tmp;
+        } catch (Exception e) {
+            print_error("Couldn't extract URI of '" + classString + "'");
+            print_error(e.getMessage());
+            System.exit(1);
+        }
+        return classUri;
+    }
+
+    public String getOntID (String classUri) {
+        String idSpace = "";
+        String classOntID = classUri;
+        // First extract the substring after the last slash to avoid possible
+        // conflicts
+        if (classOntID.contains("/")) {
+            int lastSlash = classOntID.lastIndexOf("/");
+            if (lastSlash >= 0) {
+                String tmp = classOntID.substring(lastSlash);
+                if (tmp.length() == 1) {
+                    tmp = classOntID.substring(0, lastSlash);
+                    lastSlash = tmp.lastIndexOf("/");
+                    if (lastSlash >= 0) {
+                        tmp = tmp.substring(lastSlash);
+                    }
+                }
+                if (tmp.length() > 1) {
+                    classOntID = tmp.substring(1);
+                }
             }
         }
         // OWL IDs start with `#` so we extract everything after that.
-        if (classString.contains("#")) {
-            className = classString.substring(
-                classString.indexOf("#") + 1,
-                classString.lastIndexOf(">")
+        int hashPos = classOntID.indexOf("#");
+        if (hashPos >= 0 && hashPos + 1 != classOntID.length()) {
+            classOntID = classOntID.substring(
+                hashPos + 1
             );
+            if (this.ontUri.equals(classUri.substring(0, classUri.indexOf("#")))) {
+                idSpace = this.ontology_acronym;
+            }
         }
         // If the string contains an underscore than it is most likely an OBO ontology converted to OWL. The prefix is
         // different in this case. We will use the ID space of OBO.
         // For more details: http://www.obofoundry.org/id-policy.shtml
-        if (classString.contains("_")) {
-            String idSpace = classString.substring(
-                0,
-                classString.indexOf("_")
-            );
-            className = classString.substring(classString.indexOf("_") + 1);
+        int underscorePos = classOntID.indexOf("_");
+        if (underscorePos >= 0 && underscorePos + 1 != classOntID.length()) {
+            if (idSpace.length() == 0) {
+                idSpace = classOntID.substring(
+                    0,
+                    underscorePos
+                );
+            }
+            classOntID = classOntID.substring(underscorePos + 1);
         }
-        return ontAcronym + ":" + className;
-    }
-
-    public String uniqueClassName (String ontAcronym, String className) {
-        return ontAcronym + ":" + className;
+        if (idSpace.length() > 0) {
+            idSpace = idSpace + ":";
+        }
+        return idSpace + classOntID;
     }
 
     private void initTransaction () {
         // Fire empty statement to initialize transaction
         try {
-            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT)
+            HttpResponse<JsonNode> response = Unirest.post(
+                this.server_root_url + TRANSACTION_ENDPOINT)
                     .body("{\"statements\":[]}")
                     .asJson();
             Headers headers = response.getHeaders();
             String location = "";
             if (headers.containsKey("location")) {
                 location = headers.get("location").toString();
-                this.transaction = location.substring(location.lastIndexOf("/"), location.length() -1);
-                System.out.println("Transaction Sting: '" + this.transaction + "'");
+                this.transaction = location.substring(
+                    location.lastIndexOf("/"),
+                    location.length() -1
+                );
+                System.out.println(
+                    "Transaction Sting: '" +
+                    this.transaction +
+                    "'"
+                );
             }
             if (this.verbose_output) {
-                System.out.println("Transaction initialized. Commit at " + location + " [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
+                System.out.println(
+                    "Transaction initialized. Commit at " +
+                    location +
+                    " [Neo4J status:" +
+                    Integer.toString(response.getStatus()) +
+                    "]"
+                );
             }
         } catch (Exception e) {
             print_error("Error starting transaction");
@@ -368,11 +509,26 @@ public class Owl2Graph {
     private void commitTransaction () {
         // Fire empty statement to initialize transaction
         try {
-            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction + "/commit")
+            HttpResponse<JsonNode> response = Unirest.post(
+                this.server_root_url + TRANSACTION_ENDPOINT + this.transaction + "/commit")
                     .body("{\"statements\":[]}")
                     .asJson();
             if (this.verbose_output) {
-                System.out.println("Transaction committed. [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
+                System.out.println(
+                    "Transaction committed. [Neo4J status:" +
+                    Integer.toString(response.getStatus()) +
+                    "]"
+                );
+            }
+            JSONObject jsonResponse = response.getBody().getObject();
+            JSONArray errors = (JSONArray) jsonResponse.get("errors");
+            if (errors.length() > 0) {
+                JSONObject error = (JSONObject) errors.get(0);
+                String errorMsg = error.get("message").toString();
+                if (this.verbose_output) {
+                    errorMsg = errorMsg + "\n" + error.get("stackTrace").toString();
+                }
+                throw new Exception(errorMsg);
             }
         } catch (Exception e) {
             print_error("Error committing transaction");
@@ -381,16 +537,18 @@ public class Owl2Graph {
         }
     }
 
-    private void createNode (String classLabel, String className) {
+    private void createNode (String classLabel, String classOntID, String classUri) {
         // Uniqueness for Class nodes needs to be defined before
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
         try {
+            String cql = "MERGE (n:" + classLabel + ":" + this.ontology_acronym + " {name:'" + classOntID + "',uri:'" + classUri + "'});";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                .body("{\"statements\":[{\"statement\":\"MERGE (n:" + classLabel + ":" + this.ontology_acronym + " {name:'" + className + "'});\"}]}")
+                .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
             if (this.verbose_output) {
-                System.out.println("Node (" + classLabel + ":" + className + ") created. [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
+                System.out.println("CQL: `" + cql + "` [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
+                this.cqlLogger.info(cql);
             }
         } catch (UnirestException e) {
             print_error("Error creating a node");
@@ -399,14 +557,16 @@ public class Owl2Graph {
         }
     }
 
-    private void createRelationship (String srcLabel, String srcName, String destLabel, String destName, String relationship) {
+    private void createRelationship (String srcLabel, String srcUri, String destLabel, String destUri, String relationship) {
         // Example: cypher/createRelationship.cql
         try {
+            String cql = "MATCH (src:" + srcLabel + " {uri:'" + srcUri + "'}), (dest:" + destLabel + " {uri:'" + destUri + "'}) MERGE (src)-[:`" + relationship + "`]->(dest);";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"MATCH (src:" + srcLabel + " {name:'" + srcName + "'}), (dest:" + destLabel + " {name:'" + destName + "'}) MERGE (src)-[:`" + relationship + "`]->(dest);\"}]}")
+                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
             if (this.verbose_output) {
-                System.out.println("Relationship (" + srcLabel + ":" + srcName + ")-[" + relationship +"]->(" + destLabel + ":" + destName + ") created. [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
+                System.out.println("CQL: `" + cql + "`  [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
+                this.cqlLogger.info(cql);
             }
         } catch (UnirestException e) {
             print_error("Error creating a relationship");
@@ -415,14 +575,16 @@ public class Owl2Graph {
         }
     }
 
-    private void setProperty (String classLabel, String className, String propertyName, String propertyValue) {
+    private void setProperty (String classLabel, String classUri, String propertyName, String propertyValue) {
         // Example: cypher/setProperty.cql
         try {
+            String cql = "MATCH (n:" + classLabel + " {uri:'" + classUri + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"MATCH (n:" + classLabel + " {name:'" + className + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';\"}]}")
+                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
             if (this.verbose_output) {
-                System.out.println("Property(" + propertyName + ":" + propertyValue + ") for Node(" + classLabel + ":" + className + ") set. [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
+                System.out.println("CQL: `" + cql + "` [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
+                this.cqlLogger.info(cql);
             }
         } catch (UnirestException e) {
             print_error("Error creating a node property");
