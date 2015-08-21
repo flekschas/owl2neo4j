@@ -1,12 +1,10 @@
 package org.refinery_platform.owl2graph;
 
 /** OWL API */
-import org.semanticweb.owlapi.model.*;
-import org.semanticweb.owlapi.reasoner.*;
-import org.semanticweb.owlapi.apibinding.OWLManager;
-
-/** Reasoner */
-import org.semanticweb.HermiT.Reasoner;
+import com.hp.hpl.jena.ontology.*;
+import com.hp.hpl.jena.rdf.model.ModelFactory;
+import com.hp.hpl.jena.util.iterator.ExtendedIterator;
+import com.hp.hpl.jena.util.iterator.Filter;
 
 /** Apache commons */
 import org.apache.commons.cli.*;
@@ -23,7 +21,10 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 import org.json.JSONObject;
 import org.json.JSONArray;
 
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.Iterator;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
@@ -55,10 +56,7 @@ public class Owl2Graph {
     private String neo4j_authentication_header;
     private String transaction;
 
-    private OWLOntologyManager manager;
-    private OWLOntology ontology;
-    private IRI documentIRI;
-    private OWLDataFactory datafactory;
+    private OntModel model;
     private String ontUri;
 
     private Logger cqlLogger;
@@ -176,32 +174,29 @@ public class Owl2Graph {
         parseCommandLineArguments(args);
     }
 
-    public void loadOntology() throws OWLException {
-        this.manager = OWLManager.createOWLOntologyManager();
-        this.documentIRI = IRI.create("file:" + this.path_to_owl);
-        this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
-        this.datafactory = OWLManager.getOWLDataFactory();
-        this.ontUri = ontology.getOntologyID().getOntologyIRI().toString();
+    public void loadOntology() throws Exception {
+        this.model = ModelFactory.createOntologyModel(OntModelSpec.OWL_DL_MEM_RDFS_INF);
+        try {
+            InputStream in = new FileInputStream(this.path_to_owl); // or any windows path
+            this.model.read(in, null);
+            in.close();
 
-        System.out.println("Ontology Loaded...");
-        System.out.println("Document IRI: " + documentIRI);
-        System.out.println("Ontology    : " + this.ontUri);
+            this.ontUri = this.model.getNsPrefixURI("");
+            if (this.ontUri.charAt(this.ontUri.length() - 1) == '#') {
+                this.ontUri = this.ontUri.substring(0, this.ontUri.length() - 1);
+            }
+        } catch (Exception e) {
+            print_error("Error loading the ontology");
+            print_error(e.getMessage());
+            System.exit(1);
+        }
+
+        System.out.println("Ontology Loaded!");
+        System.out.println("Ontology URI:    " + this.ontUri);
     }
 
     private void importOntology() throws Exception
     {
-        OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
-        ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor();
-        OWLReasonerConfiguration config = new SimpleConfiguration(
-            progressMonitor
-        );
-        OWLReasoner reasoner = reasonerFactory.createReasoner(ontology, config);
-        reasoner.precomputeInferences();
-
-        if (!reasoner.isConsistent()) {
-            throw new Exception("Ontology is inconsistent");
-        }
-
         // Init Cypher logger
         this.cqlLogger = Logger.getLogger("Cypher:" + this.ontology_acronym);
         if (this.verbose_output) {
@@ -245,7 +240,7 @@ public class Owl2Graph {
                 ONTOLOGY_NODE_LABEL,
                 this.ontUri,
                 "uri",
-                ontology.getOntologyID().getOntologyIRI().toString()
+                this.ontUri
             );
 
             // Create root node "owl:Thing"
@@ -255,145 +250,69 @@ public class Owl2Graph {
                 ROOT_CLASS_URI
             );
 
-            for (OWLClass c :ontology.getClassesInSignature(true)) {
-                String classString = c.toString();
-                String classUri = this.extractUri(classString);
-                String classOntID = this.getOntID(classUri);
 
-                createNode(CLASS_NODE_LABEL, classOntID, classUri);
+            // Set of variables used in each loop.
+            OntClass klass;
+            OntClass superKlass;
+            String klassLabel;
+            String klassOntID;
+            String klassUri;
+            String superKlassOntID;
+            String superKlassUri;
 
-                // Get properties/annotations of that class
-                for (OWLAnnotation annotation : c.getAnnotations(ontology, datafactory.getRDFSLabel())) {
-                    if (annotation.getValue() instanceof OWLLiteral) {
-                        OWLLiteral val = (OWLLiteral) annotation.getValue();
-                        // Store escaped literal
-                        setProperty(
-                            CLASS_NODE_LABEL,
-                            classUri,
-                            "rdfs:label",
-                            val.getLiteral().replace("'", "\\'")
-                        );
-                        String lang = val.getLang();
-                        if (lang.length() > 0) {
-                            setProperty(
-                                CLASS_NODE_LABEL,
-                                classUri,
-                                "labelLang",
-                                val.getLang()
-                            );
-                        }
-                    }
+            // Iterate over classes that are a URI resource only
+            // Why: http://stackoverflow.com/a/24566750/981933
+            ExtendedIterator<OntClass> it = this.model.listClasses().filterKeep( new Filter<OntClass>() {
+                @Override
+                public boolean accept(OntClass o) {
+                    return o.isURIResource();
                 }
+            });
 
-                NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
+            while ( it.hasNext() ) {
+                klass = it.next();
 
-                if (superclasses.isEmpty()) {
-                    createRelationship(
+                klassUri = klass.getURI();
+                klassOntID = klass.getLocalName();
+
+                createNode(CLASS_NODE_LABEL, klassOntID, klassUri);
+
+                // Get class label
+                klassLabel = klass.getLabel("EN");
+                if (klassLabel != null && !klassLabel.isEmpty()) {
+                    setProperty(
                         CLASS_NODE_LABEL,
-                        classUri,
-                        CLASS_NODE_LABEL,
-                        ROOT_CLASS_URI,
-                        "rdfs:subClassOf"
+                        klassUri,
+                        "rdfs:label",
+                        klassLabel.replace("'", "\\'")
                     );
-                } else {
-                    for (org.semanticweb.owlapi.reasoner.Node<OWLClass>
-                        parentOWLNode: superclasses) {
-                        OWLClassExpression parent =
-                            parentOWLNode.getRepresentativeElement();
-                        String parentString = parent.toString();
-                        String parentUri = this.extractUri(parentString);
-                        String parentOntID = this.getOntID(parentUri);
-
-                        createNode(
-                            CLASS_NODE_LABEL,
-                            parentOntID,
-                            parentUri
-                        );
-                        createRelationship(
-                            CLASS_NODE_LABEL,
-                            classUri,
-                            CLASS_NODE_LABEL,
-                            parentUri,
-                            "rdfs:subClassOf"
-                        );
-                    }
                 }
 
-                for (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual> in
-                    : reasoner.getInstances(c, true)) {
-                    OWLNamedIndividual i = in.getRepresentativeElement();
-                    String indString = i.toString();
-                    String indUri = this.extractUri(indString);
-                    String indOntID = this.getOntID(indUri);
+                ExtendedIterator<OntClass> jt = klass.listSuperClasses().filterKeep( new Filter<OntClass>() {
+                    @Override
+                    public boolean accept(OntClass o) {
+                        return o.isURIResource();
+                    }
+                });
+
+                while ( jt.hasNext() ) {
+                    superKlass = jt.next();
+                    superKlassOntID = superKlass.getLocalName();
+                    superKlassUri = superKlass.getURI();
 
                     createNode(
-                        INDIVIDUAL_NODE_LABEL,
-                        indOntID,
-                        indUri
-                    );
-                    createRelationship(
-                        INDIVIDUAL_NODE_LABEL,
-                        indUri,
                         CLASS_NODE_LABEL,
-                        classUri,
-                        "rdf:type"
+                        superKlassOntID,
+                        superKlassUri
                     );
 
-                    for (OWLObjectPropertyExpression objectProperty:
-                        ontology.getObjectPropertiesInSignature()) {
-                        for
-                        (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual>
-                        object: reasoner.getObjectPropertyValues(i,
-                        objectProperty)) {
-                            // Get Relationship name
-                            String relString = objectProperty.toString();
-                            String relUri = this.extractUri(relString);
-                            String relOntID = this.getOntID(relUri);
-
-                            // Create a meta node for the potentially new Relationship
-                            createNode(
-                                RELATIONSHIP_NODE_LABEL,
-                                relOntID,
-                                relUri
-                            );
-
-                            // Get related Individual
-                            String relIndString = object.getRepresentativeElement().toString();
-                            String relIndUri = this.extractUri(relIndString);
-
-                            // Connect both individuals
-                            createRelationship(
-                                INDIVIDUAL_NODE_LABEL,
-                                indUri,
-                                INDIVIDUAL_NODE_LABEL,
-                                relIndUri,
-                                relOntID
-                            );
-                        }
-                    }
-                    for (OWLDataPropertyExpression dataProperty :
-                        ontology.getDataPropertiesInSignature()) {
-                        for (OWLLiteral object: reasoner.getDataPropertyValues(
-                                i, dataProperty.asOWLDataProperty())) {
-                            String propertyString =
-                                dataProperty.asOWLDataProperty().toString();
-                            String propertyUri = this.extractUri(propertyString);
-                            String propertyOntID = this.getOntID(propertyUri);
-                            String propertyValue = object.toString();
-
-                            createNode(
-                                PROPERTY_NODE_LABEL,
-                                propertyOntID,
-                                propertyUri
-                            );
-                            setProperty(
-                                INDIVIDUAL_NODE_LABEL,
-                                indUri,
-                                propertyOntID,
-                                propertyValue
-                            );
-                        }
-                    }
+                    createRelationship(
+                        CLASS_NODE_LABEL,
+                        klassUri,
+                        CLASS_NODE_LABEL,
+                        superKlassUri,
+                        "rdfs:subClassOf"
+                    );
                 }
             }
             commitTransaction();
@@ -404,12 +323,12 @@ public class Owl2Graph {
     }
 
     public String extractUri (String classString) {
-        String classUri = classString;
+        String klassUri = classString;
         int openingAngleBracketPos = classString.indexOf("<");
         int closingAngleBracketPos = classString.lastIndexOf(">");
         try {
             if (openingAngleBracketPos >= 0 && closingAngleBracketPos >= 0) {
-                classUri = classString.substring(
+                klassUri = classString.substring(
                     classString.indexOf("<") + 1,
                     classString.lastIndexOf(">")
                 );
@@ -419,57 +338,57 @@ public class Owl2Graph {
             print_error(e.getMessage());
             System.exit(1);
         }
-        return classUri;
+        return klassUri;
     }
 
-    public String getOntID (String classUri) {
+    public String getOntID (String klassUri) {
         String idSpace = "";
-        String classOntID = classUri;
+        String klassOntID = klassUri;
         // First extract the substring after the last slash to avoid possible
         // conflicts
-        if (classOntID.contains("/")) {
-            int lastSlash = classOntID.lastIndexOf("/");
+        if (klassOntID.contains("/")) {
+            int lastSlash = klassOntID.lastIndexOf("/");
             if (lastSlash >= 0) {
-                String tmp = classOntID.substring(lastSlash);
+                String tmp = klassOntID.substring(lastSlash);
                 if (tmp.length() == 1) {
-                    tmp = classOntID.substring(0, lastSlash);
+                    tmp = klassOntID.substring(0, lastSlash);
                     lastSlash = tmp.lastIndexOf("/");
                     if (lastSlash >= 0) {
                         tmp = tmp.substring(lastSlash);
                     }
                 }
                 if (tmp.length() > 1) {
-                    classOntID = tmp.substring(1);
+                    klassOntID = tmp.substring(1);
                 }
             }
         }
         // OWL IDs start with `#` so we extract everything after that.
-        int hashPos = classOntID.indexOf("#");
-        if (hashPos >= 0 && hashPos + 1 != classOntID.length()) {
-            classOntID = classOntID.substring(
+        int hashPos = klassOntID.indexOf("#");
+        if (hashPos >= 0 && hashPos + 1 != klassOntID.length()) {
+            klassOntID = klassOntID.substring(
                 hashPos + 1
             );
-            if (this.ontUri.equals(classUri.substring(0, classUri.indexOf("#")))) {
+            if (this.ontUri.equals(klassUri.substring(0, klassUri.indexOf("#")))) {
                 idSpace = this.ontology_acronym;
             }
         }
         // If the string contains an underscore than it is most likely an OBO ontology converted to OWL. The prefix is
         // different in this case. We will use the ID space of OBO.
         // For more details: http://www.obofoundry.org/id-policy.shtml
-        int underscorePos = classOntID.indexOf("_");
-        if (underscorePos >= 0 && underscorePos + 1 != classOntID.length()) {
+        int underscorePos = klassOntID.indexOf("_");
+        if (underscorePos >= 0 && underscorePos + 1 != klassOntID.length()) {
             if (idSpace.length() == 0) {
-                idSpace = classOntID.substring(
+                idSpace = klassOntID.substring(
                     0,
                     underscorePos
                 );
             }
-            classOntID = classOntID.substring(underscorePos + 1);
+            klassOntID = klassOntID.substring(underscorePos + 1);
         }
         if (idSpace.length() > 0) {
             idSpace = idSpace + ":";
         }
-        return idSpace + classOntID;
+        return idSpace + klassOntID;
     }
 
     private void initTransaction () {
@@ -485,12 +404,7 @@ public class Owl2Graph {
                 location = headers.get("location").toString();
                 this.transaction = location.substring(
                     location.lastIndexOf("/"),
-                    location.length() -1
-                );
-                System.out.println(
-                    "Transaction Sting: '" +
-                    this.transaction +
-                    "'"
+                    location.length() - 1
                 );
             }
             if (this.verbose_output) {
@@ -540,12 +454,12 @@ public class Owl2Graph {
         }
     }
 
-    private void createNode (String classLabel, String classOntID, String classUri) {
+    private void createNode (String klassLabel, String klassOntID, String klassUri) {
         // Uniqueness for Class nodes needs to be defined before
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
         try {
-            String cql = "MERGE (n:" + classLabel + ":" + this.ontology_acronym + " {name:'" + classOntID + "',uri:'" + classUri + "'});";
+            String cql = "MERGE (n:" + klassLabel + ":" + this.ontology_acronym + " {name:'" + klassOntID + "',uri:'" + klassUri + "'});";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
                 .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
@@ -578,10 +492,10 @@ public class Owl2Graph {
         }
     }
 
-    private void setProperty (String classLabel, String classUri, String propertyName, String propertyValue) {
+    private void setProperty (String klassLabel, String klassUri, String propertyName, String propertyValue) {
         // Example: cypher/setProperty.cql
         try {
-            String cql = "MATCH (n:" + classLabel + " {uri:'" + classUri + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';";
+            String cql = "MATCH (n:" + klassLabel + " {uri:'" + klassUri + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
                     .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
