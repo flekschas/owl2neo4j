@@ -322,75 +322,6 @@ public class Owl2Graph {
         }
     }
 
-    public String extractUri (String classString) {
-        String klassUri = classString;
-        int openingAngleBracketPos = classString.indexOf("<");
-        int closingAngleBracketPos = classString.lastIndexOf(">");
-        try {
-            if (openingAngleBracketPos >= 0 && closingAngleBracketPos >= 0) {
-                klassUri = classString.substring(
-                    classString.indexOf("<") + 1,
-                    classString.lastIndexOf(">")
-                );
-            }
-        } catch (Exception e) {
-            print_error("Couldn't extract URI of '" + classString + "'");
-            print_error(e.getMessage());
-            System.exit(1);
-        }
-        return klassUri;
-    }
-
-    public String getOntID (String klassUri) {
-        String idSpace = "";
-        String klassOntID = klassUri;
-        // First extract the substring after the last slash to avoid possible
-        // conflicts
-        if (klassOntID.contains("/")) {
-            int lastSlash = klassOntID.lastIndexOf("/");
-            if (lastSlash >= 0) {
-                String tmp = klassOntID.substring(lastSlash);
-                if (tmp.length() == 1) {
-                    tmp = klassOntID.substring(0, lastSlash);
-                    lastSlash = tmp.lastIndexOf("/");
-                    if (lastSlash >= 0) {
-                        tmp = tmp.substring(lastSlash);
-                    }
-                }
-                if (tmp.length() > 1) {
-                    klassOntID = tmp.substring(1);
-                }
-            }
-        }
-        // OWL IDs start with `#` so we extract everything after that.
-        int hashPos = klassOntID.indexOf("#");
-        if (hashPos >= 0 && hashPos + 1 != klassOntID.length()) {
-            klassOntID = klassOntID.substring(
-                hashPos + 1
-            );
-            if (this.ontUri.equals(klassUri.substring(0, klassUri.indexOf("#")))) {
-                idSpace = this.ontology_acronym;
-            }
-        }
-        // If the string contains an underscore than it is most likely an OBO ontology converted to OWL. The prefix is
-        // different in this case. We will use the ID space of OBO.
-        // For more details: http://www.obofoundry.org/id-policy.shtml
-        int underscorePos = klassOntID.indexOf("_");
-        if (underscorePos >= 0 && underscorePos + 1 != klassOntID.length()) {
-            if (idSpace.length() == 0) {
-                idSpace = klassOntID.substring(
-                    0,
-                    underscorePos
-                );
-            }
-            klassOntID = klassOntID.substring(underscorePos + 1);
-        }
-        if (idSpace.length() > 0) {
-            idSpace = idSpace + ":";
-        }
-        return idSpace + klassOntID;
-    }
-
     private void initTransaction () {
         // Fire empty statement to initialize transaction
         try {
@@ -564,7 +495,7 @@ public class Owl2Graph {
             .type(String.class)
             .required()
             .longOpt("abbreviation")
-            .desc("Ontology abbreviation (E.g. go)")
+            .desc("Ontology abbreviation (E.g. GO)")
             .build();
 
         Option server = Option.builder("s")
@@ -582,7 +513,6 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("user")
             .desc("Neo4J user name")
             .build();
@@ -592,7 +522,6 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("password")
             .desc("Neo4J user password")
             .build();
