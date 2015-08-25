@@ -9,6 +9,7 @@ import com.hp.hpl.jena.util.iterator.Filter;
 /** Apache commons */
 import org.apache.commons.cli.*;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 
 /** Jersey RESTful client */
 import com.mashape.unirest.http.Unirest;
@@ -181,10 +182,17 @@ public class Owl2Graph {
             this.model.read(in, null);
             in.close();
 
-            this.ontUri = this.model.getNsPrefixURI("");
+            // Get URI for the source ontology to be imported.
+            String ontUriPrefix = this.model.getNsPrefixURI("");
+            this.ontUri = ontUriPrefix;
             if (this.ontUri.charAt(this.ontUri.length() - 1) == '#') {
                 this.ontUri = this.ontUri.substring(0, this.ontUri.length() - 1);
             }
+
+            // Add prefix for to the PrefixMapping for the ontology to be imported
+            this.model.setNsPrefix(this.ontology_acronym, ontUriPrefix);
+            // Remove the empty prefix otherwise it will match URIs and append an empty prefix.
+            this.model.removeNsPrefix("");
         } catch (Exception e) {
             print_error("Error loading the ontology");
             print_error(e.getMessage());
@@ -206,9 +214,7 @@ public class Owl2Graph {
                 this.cqlLogger.addHandler(fh);
                 SimpleFormatter formatter = new SimpleFormatter();
                 fh.setFormatter(formatter);
-            } catch (SecurityException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
@@ -244,11 +250,11 @@ public class Owl2Graph {
             );
 
             // Create root node "owl:Thing"
-            createNode(
-                CLASS_NODE_LABEL,
-                ROOT_CLASS_ONT_ID,
-                ROOT_CLASS_URI
-            );
+//            createNode(
+//                CLASS_NODE_LABEL,
+//                ROOT_CLASS_ONT_ID,
+//                ROOT_CLASS_URI
+//            );
 
 
             // Set of variables used in each loop.
@@ -273,13 +279,13 @@ public class Owl2Graph {
                 klass = it.next();
 
                 klassUri = klass.getURI();
-                klassOntID = klass.getLocalName();
+                klassOntID = createOntID(klass);
 
                 createNode(CLASS_NODE_LABEL, klassOntID, klassUri);
 
                 // Get class label
                 klassLabel = klass.getLabel("EN");
-                if (klassLabel != null && !klassLabel.isEmpty()) {
+                if (StringUtils.isNotEmpty(klassLabel)) {
                     setProperty(
                         CLASS_NODE_LABEL,
                         klassUri,
@@ -297,8 +303,8 @@ public class Owl2Graph {
 
                 while ( jt.hasNext() ) {
                     superKlass = jt.next();
-                    superKlassOntID = superKlass.getLocalName();
                     superKlassUri = superKlass.getURI();
+                    superKlassOntID = createOntID(superKlass);
 
                     createNode(
                         CLASS_NODE_LABEL,
@@ -320,6 +326,13 @@ public class Owl2Graph {
             print_error(e.getMessage());
             System.exit(1);
         }
+    }
+
+    public String createOntID (OntClass klass) {
+        if (StringUtils.isNotEmpty(this.model.getNsURIPrefix(klass.getNameSpace()))) {
+            return this.model.shortForm(klass.getURI());
+        }
+        return klass.getLocalName();
     }
 
     private void initTransaction () {
