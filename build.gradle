@@ -16,6 +16,7 @@ dependencies {
     compile 'com.hermit-reasoner:org.semanticweb.hermit:1.3.8.4'
     compile 'commons-codec:commons-codec:1.10'
     compile 'org.json:json:20140107'
+    compile 'org.apache.commons:commons-lang3:3.4'
 }
 
 jar {
