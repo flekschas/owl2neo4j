@@ -3,6 +3,7 @@ package org.refinery_platform.owl2graph;
 /** OWL API */
 import com.hp.hpl.jena.ontology.*;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
+import com.hp.hpl.jena.reasoner.Reasoner;
 import com.hp.hpl.jena.util.iterator.ExtendedIterator;
 import com.hp.hpl.jena.util.iterator.Filter;
 
@@ -21,6 +22,7 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 /** JSON **/
 import org.json.JSONObject;
 import org.json.JSONArray;
+import org.mindswap.pellet.jena.PelletReasonerFactory;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -176,7 +178,14 @@ public class Owl2Graph {
     }
 
     public void loadOntology() throws Exception {
-        this.model = ModelFactory.createOntologyModel(OntModelSpec.OWL_DL_MEM_RDFS_INF);
+        // Using Pellet for reasoning.
+        this.model = ModelFactory.createOntologyModel(PelletReasonerFactory.THE_SPEC);
+
+        // For some reason this settings reasoned that some classes have no parent, which seems weird.
+        // Example: Pizza Ontology: #MeatyPizza has no parent although it has a super class without reasoning and even
+        // with reasoning (tested with HermiT in Protege).
+        //this.model = ModelFactory.createOntologyModel(OntModelSpec.OWL_DL_MEM_TRANS_INF);
+
         try {
             InputStream in = new FileInputStream(this.path_to_owl); // or any windows path
             this.model.read(in, null);
@@ -271,7 +280,7 @@ public class Owl2Graph {
             ExtendedIterator<OntClass> it = this.model.listClasses().filterKeep( new Filter<OntClass>() {
                 @Override
                 public boolean accept(OntClass o) {
-                    return o.isURIResource();
+                return o.isURIResource();
                 }
             });
 
@@ -294,10 +303,10 @@ public class Owl2Graph {
                     );
                 }
 
-                ExtendedIterator<OntClass> jt = klass.listSuperClasses().filterKeep( new Filter<OntClass>() {
+                ExtendedIterator<OntClass> jt = klass.listSuperClasses(true).filterKeep( new Filter<OntClass>() {
                     @Override
                     public boolean accept(OntClass o) {
-                        return o.isURIResource();
+                    return o.isURIResource();
                     }
                 });
 
@@ -403,7 +412,7 @@ public class Owl2Graph {
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
         try {
-            String cql = "MERGE (n:" + klassLabel + ":" + this.ontology_acronym + " {name:'" + klassOntID + "',uri:'" + klassUri + "'});";
+            String cql = "MERGE (n:" + klassLabel + " {name:'" + klassOntID + "',uri:'" + klassUri + "'}) SET n :" + this.ontology_acronym + ";";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
                 .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
