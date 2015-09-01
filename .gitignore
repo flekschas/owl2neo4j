@@ -21,3 +21,4 @@ Thumbs.db
 #################
 .editorconfig
 *.log*
+/owl2neo4j
