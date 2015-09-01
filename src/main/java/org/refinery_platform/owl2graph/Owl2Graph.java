@@ -4,6 +4,7 @@ package org.refinery_platform.owl2graph;
 import com.hp.hpl.jena.ontology.*;
 import com.hp.hpl.jena.rdf.model.ModelFactory;
 import com.hp.hpl.jena.reasoner.Reasoner;
+import com.hp.hpl.jena.reasoner.ValidityReport;
 import com.hp.hpl.jena.util.iterator.ExtendedIterator;
 import com.hp.hpl.jena.util.iterator.Filter;
 
@@ -22,6 +23,7 @@ import com.mashape.unirest.http.exceptions.UnirestException;
 /** JSON **/
 import org.json.JSONObject;
 import org.json.JSONArray;
+import org.mindswap.pellet.PelletOptions;
 import org.mindswap.pellet.jena.PelletReasonerFactory;
 
 import java.io.FileInputStream;
@@ -178,6 +180,8 @@ public class Owl2Graph {
     }
 
     public void loadOntology() throws Exception {
+        PelletOptions.FREEZE_BUILTIN_NAMESPACES = false;
+
         // Using Pellet for reasoning.
         this.model = ModelFactory.createOntologyModel(PelletReasonerFactory.THE_SPEC);
 
@@ -226,6 +230,14 @@ public class Owl2Graph {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        }
+
+        // print validation report
+        ValidityReport report = this.model.validate();
+        if (!report.isValid()) {
+            print_error("Error importing the ontology. Ontology is bot valid.");
+            printIterator(report.getReports(), "Validation Results");
+            System.exit(1);
         }
 
         // This blog is heavily inspired by:
@@ -607,6 +619,22 @@ public class Owl2Graph {
             usage(all_options);
             System.exit(1);
         }
+    }
+
+    private static void printIterator(Iterator<?> i, String header) {
+        System.out.println(header);
+        for(int c = 0; c < header.length(); c++)
+            System.out.print("=");
+        System.out.println();
+
+        if(i.hasNext()) {
+            while (i.hasNext())
+                System.out.println( i.next() );
+        }
+        else
+            System.out.println("<EMPTY>");
+
+        System.out.println();
     }
 
     /**
