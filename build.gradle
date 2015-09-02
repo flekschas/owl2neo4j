@@ -18,6 +18,7 @@ dependencies {
     compile 'org.json:json:20140107'
     compile 'org.apache.commons:commons-lang3:3.4'
     compile fileTree(dir: 'libs/pellet', include: ['*.jar'])
+    compile fileTree(dir: 'libs/trowl', include: ['*.jar'])
 }
 
 jar {

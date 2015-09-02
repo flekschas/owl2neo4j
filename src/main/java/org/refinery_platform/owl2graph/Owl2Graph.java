@@ -9,6 +9,7 @@ import com.hp.hpl.jena.util.iterator.ExtendedIterator;
 import com.hp.hpl.jena.util.iterator.Filter;
 
 /** Apache commons */
+import eu.trowl.jena.TrOWLJenaFactory;
 import org.apache.commons.cli.*;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
@@ -180,15 +181,17 @@ public class Owl2Graph {
     }
 
     public void loadOntology() throws Exception {
-        PelletOptions.FREEZE_BUILTIN_NAMESPACES = false;
+        //PelletOptions.FREEZE_BUILTIN_NAMESPACES = false;
 
         // Using Pellet for reasoning.
-        this.model = ModelFactory.createOntologyModel(PelletReasonerFactory.THE_SPEC);
+        //this.model = ModelFactory.createOntologyModel(PelletReasonerFactory.THE_SPEC);
 
         // For some reason this settings reasoned that some classes have no parent, which seems weird.
         // Example: Pizza Ontology: #MeatyPizza has no parent although it has a super class without reasoning and even
         // with reasoning (tested with HermiT in Protege).
         //this.model = ModelFactory.createOntologyModel(OntModelSpec.OWL_DL_MEM_TRANS_INF);
+
+        this.model = ModelFactory.createOntologyModel(TrOWLJenaFactory.THE_SPEC);
 
         try {
             InputStream in = new FileInputStream(this.path_to_owl); // or any windows path
@@ -292,7 +295,7 @@ public class Owl2Graph {
             ExtendedIterator<OntClass> it = this.model.listClasses().filterKeep( new Filter<OntClass>() {
                 @Override
                 public boolean accept(OntClass o) {
-                return o.isURIResource();
+                    return o.isURIResource();
                 }
             });
 
@@ -318,7 +321,7 @@ public class Owl2Graph {
                 ExtendedIterator<OntClass> jt = klass.listSuperClasses(true).filterKeep( new Filter<OntClass>() {
                     @Override
                     public boolean accept(OntClass o) {
-                    return o.isURIResource();
+                        return o.isURIResource();
                     }
                 });
 
@@ -444,7 +447,7 @@ public class Owl2Graph {
         try {
             String cql = "MATCH (src:" + srcLabel + " {uri:'" + srcUri + "'}), (dest:" + destLabel + " {uri:'" + destUri + "'}) MERGE (src)-[:`" + relationship + "`]->(dest);";
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
                     .asJson();
             if (this.verbose_output) {
                 System.out.println("CQL: `" + cql + "`  [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
