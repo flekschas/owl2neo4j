@@ -703,7 +703,6 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("user")
             .desc("Neo4J user name")
             .build();
@@ -713,7 +712,6 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("password")
             .desc("Neo4J user password")
             .build();
