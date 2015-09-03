@@ -24,6 +24,7 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
@@ -255,7 +256,7 @@ public class Owl2Graph {
                 ROOT_CLASS_URI
             );
 
-            for (OWLClass c :ontology.getClassesInSignature(true)) {
+            for (OWLClass c: ontology.getClassesInSignature(true)) {
                 String classString = c.toString();
                 String classUri = this.extractUri(classString);
                 String classOntID = this.getOntID(classUri);
@@ -296,10 +297,8 @@ public class Owl2Graph {
                         "rdfs:subClassOf"
                     );
                 } else {
-                    for (org.semanticweb.owlapi.reasoner.Node<OWLClass>
-                        parentOWLNode: superclasses) {
-                        OWLClassExpression parent =
-                            parentOWLNode.getRepresentativeElement();
+                    for (Node<OWLClass> parentOWLNode: superclasses) {
+                        OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
                         String parentString = parent.toString();
                         String parentUri = this.extractUri(parentString);
                         String parentOntID = this.getOntID(parentUri);
@@ -317,6 +316,31 @@ public class Owl2Graph {
                             "rdfs:subClassOf"
                         );
                     }
+                }
+
+                Set<OWLClass> equivalentClasses = getEquivalentClasses(reasoner, c);
+
+                for (OWLClass ec : equivalentClasses) {
+                    String ecString = ec.toString();
+                    String ecUri = this.extractUri(ecString);
+                    String ecOntID = this.getOntID(ecUri);
+
+                    if (!ecUri.equals(classUri)) {
+                        createNode(
+                            CLASS_NODE_LABEL,
+                            ecOntID,
+                            ecUri
+                        );
+
+                        createRelationship(
+                            CLASS_NODE_LABEL,
+                            ecUri,
+                            CLASS_NODE_LABEL,
+                            classUri,
+                            "owl:equivalentClass"
+                        );
+                    }
+
                 }
 
                 for (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual> in
@@ -374,7 +398,7 @@ public class Owl2Graph {
                     for (OWLDataPropertyExpression dataProperty :
                         ontology.getDataPropertiesInSignature()) {
                         for (OWLLiteral object: reasoner.getDataPropertyValues(
-                                i, dataProperty.asOWLDataProperty())) {
+                            i, dataProperty.asOWLDataProperty())) {
                             String propertyString =
                                 dataProperty.asOWLDataProperty().toString();
                             String propertyUri = this.extractUri(propertyString);
@@ -470,6 +494,17 @@ public class Owl2Graph {
             idSpace = idSpace + ":";
         }
         return idSpace + classOntID;
+    }
+
+    private Set<OWLClass> getEquivalentClasses (OWLReasoner reasoner, OWLClass c) {
+        Node<OWLClass> equivalentClasses = reasoner.getEquivalentClasses(c);
+        Set<OWLClass> results;
+        if (!c.isAnonymous()) {
+            results = equivalentClasses.getEntities();
+        } else {
+            results = equivalentClasses.getEntitiesMinus(c.asOWLClass());
+        }
+        return results;
     }
 
     private void initTransaction () {
