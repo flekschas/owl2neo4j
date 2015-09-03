@@ -181,17 +181,19 @@ public class Owl2Graph {
     }
 
     public void loadOntology() throws Exception {
-        //PelletOptions.FREEZE_BUILTIN_NAMESPACES = false;
+        PelletOptions.FREEZE_BUILTIN_NAMESPACES = false;
+        PelletOptions.IGNORE_UNSUPPORTED_AXIOMS = true;
 
         // Using Pellet for reasoning.
-        //this.model = ModelFactory.createOntologyModel(PelletReasonerFactory.THE_SPEC);
+        this.model = ModelFactory.createOntologyModel(PelletReasonerFactory.THE_SPEC);
 
         // For some reason this settings reasoned that some classes have no parent, which seems weird.
         // Example: Pizza Ontology: #MeatyPizza has no parent although it has a super class without reasoning and even
         // with reasoning (tested with HermiT in Protege).
         //this.model = ModelFactory.createOntologyModel(OntModelSpec.OWL_DL_MEM_TRANS_INF);
+        //this.model = ModelFactory.createOntologyModel(OntModelSpec.RDFS_MEM_TRANS_INF);
 
-        this.model = ModelFactory.createOntologyModel(TrOWLJenaFactory.THE_SPEC);
+        //this.model = ModelFactory.createOntologyModel(TrOWLJenaFactory.THE_SPEC);
 
         try {
             InputStream in = new FileInputStream(this.path_to_owl); // or any windows path
@@ -292,7 +294,7 @@ public class Owl2Graph {
 
             // Iterate over classes that are a URI resource only
             // Why: http://stackoverflow.com/a/24566750/981933
-            ExtendedIterator<OntClass> it = this.model.listClasses().filterKeep( new Filter<OntClass>() {
+            ExtendedIterator<OntClass> it = this.model.listClasses().filterKeep(new Filter<OntClass>() {
                 @Override
                 public boolean accept(OntClass o) {
                     return o.isURIResource();
@@ -318,7 +320,7 @@ public class Owl2Graph {
                     );
                 }
 
-                ExtendedIterator<OntClass> jt = klass.listSuperClasses(true).filterKeep( new Filter<OntClass>() {
+                ExtendedIterator<OntClass> jt = klass.listSuperClasses(true).filterKeep(new Filter<OntClass>() {
                     @Override
                     public boolean accept(OntClass o) {
                         return o.isURIResource();
