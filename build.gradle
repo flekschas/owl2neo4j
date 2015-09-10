@@ -1,7 +1,9 @@
 apply plugin: 'java'
 apply plugin: 'idea'
 
-version = '0.1.0'
+version = '0.2.0'
+
+libsDirName = './dist'
 
 repositories {
     mavenCentral()
@@ -32,5 +34,5 @@ jar {
 }
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '2.4'
+    gradleVersion = '2.6'
 }

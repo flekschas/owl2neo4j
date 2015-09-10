@@ -23,3 +23,4 @@ Thumbs.db
 *.log*
 /owl2neo4j
 /reasoner comparison/
+/dist
