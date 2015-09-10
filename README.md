@@ -4,13 +4,15 @@ Convert [OWL](owl) to labeled property graph and import into [Neo4J](neo4j).
 
 ## Build
 
+Each release has a precompiled JAR attached. To build the manually JAR file  follow the three steps below. The JAR file will be located in `dist`.
+
 **Requirements**:
 
 * [Java RE 7](jre7)
 * [Gradle](gradle)
 
 ```
-$ clone https://github.com/flekschas/owl2neo4j
+$ git clone https://github.com/flekschas/owl2neo4j
 $ cd owl2neo4j
 $ gradle build
 ```
@@ -22,13 +24,13 @@ $ gradle build
 * [Neo4J](neo4j)
 
 ```
-$ java -jar ./build/libs/Owl2Neo4J.jar -o pizza.owl -n "Pizza Ontology" -a pizza -s http://localhost:7474 -u neo4j -p neo4j
+$ java -jar ./build/libs/owl2neo4j.jar -o pizza.owl -n "Pizza Ontology" -a pizza -s http://localhost:7474 -u neo4j -p neo4j
 ```
 
 **Command line options**:
 
 ```
-usage: java -jar Owl2Graph.jar -a <String> [-h] -n <String> -o <Path> -p
+usage: java -jar owl2neo4j.jar -a <String> [-h] -n <String> -o <Path> -p
        <String> -s <URL> -u <String> [-v] [--version]
 Import OWL into Neo4J as a labeled property graph.
 
@@ -45,10 +47,10 @@ Import OWL into Neo4J as a labeled property graph.
 
 **Importing large ontologies**:
 
-By default the OWLAPI XML loader has a 64,000 triple limit. To increase the limit and being able to import larger ontologies start `Owl2Neo4J.jar` with `DentityExpansionLimit=<LARGE_NUMBER>` flag like so:
+By default the OWLAPI XML loader has a 64,000 triple limit. To increase the limit and being able to import larger ontologies start `owl2neo4j.jar` with `DentityExpansionLimit=<LARGE_NUMBER>` flag like so:
 
 ```
-$ java -jar -DentityExpansionLimit=10000000 ./build/libs/Owl2Neo4J.jar -o extra-large-pizza.owl -n "Extra Large Pizza Ontology" -a elpo -s http://localhost:7474 -u neo4j -p neo4j
+$ java -jar -DentityExpansionLimit=10000000 ./build/libs/owl2neo4j.jar -o extra-large-pizza.owl -n "Extra Large Pizza Ontology" -a elpo -s http://localhost:7474 -u neo4j -p neo4j
 ```
 
 Be sure that you have enough RAM to theoretical load _10000000_ (or any other number), otherwise your system will complain.

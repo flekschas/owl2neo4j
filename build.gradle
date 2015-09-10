@@ -1,7 +1,9 @@
 apply plugin: 'java'
 apply plugin: 'idea'
 
-version = '0.1.0'
+version = '0.2.0'
+
+libsDirName = '../dist'
 
 repositories {
     mavenCentral()
@@ -15,21 +17,22 @@ dependencies {
     compile 'com.hermit-reasoner:org.semanticweb.hermit:1.3.8.4'
     compile 'commons-codec:commons-codec:1.10'
     compile 'org.json:json:20140107'
+    compile 'org.apache.commons:commons-lang3:3.4'
 }
 
 jar {
-    archiveName = baseName + '.' + extension
+    archiveName = 'owl2neo4j.' + extension
     // Create a 'fat' jar by including all dependencies
     from {
         configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
     }
     manifest {
         attributes('Main-Class': 'org.refinery_platform.owl2graph.Owl2Graph',
-                   'Implementation-Title': 'OWL 2 Graph',
+                   'Implementation-Title': 'OWL 2 Neo4J',
                    'Implementation-Version': version)
     }
 }
 
 task wrapper(type: Wrapper) {
-    gradleVersion = '2.4'
+    gradleVersion = '2.6'
 }

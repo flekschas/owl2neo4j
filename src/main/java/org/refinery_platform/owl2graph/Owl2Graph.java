@@ -11,6 +11,7 @@ import org.semanticweb.HermiT.Reasoner;
 /** Apache commons */
 import org.apache.commons.cli.*;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringUtils;
 
 /** Jersey RESTful client */
 import com.mashape.unirest.http.Unirest;
@@ -24,6 +25,7 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
@@ -71,6 +73,33 @@ public class Owl2Graph {
     public static final String ANSI_YELLOW = "\u001B[33m";
 
     public static final String VERSION = "0.1.0";
+
+    // Inline class handling labels
+    public class Label {
+        private String text;
+        private String lang;
+
+        public Label (String text, String lang) {
+            this.text = text;
+            this.lang = lang;
+        }
+
+        public String getLang () {
+            return this.lang;
+        }
+
+        public String getText () {
+            return this.text;
+        }
+
+        public void setLang (String lang) {
+            this.lang = lang;
+        }
+
+        public void setText (String text) {
+            this.text = text;
+        }
+    }
 
     public static void main(String[] args) {
         Owl2Graph ont = new Owl2Graph(args);
@@ -181,7 +210,7 @@ public class Owl2Graph {
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
         this.datafactory = OWLManager.getOWLDataFactory();
-        this.ontUri = ontology.getOntologyID().getOntologyIRI().toString();
+        this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
 
         System.out.println("Ontology Loaded...");
         System.out.println("Document IRI: " + documentIRI);
@@ -195,7 +224,7 @@ public class Owl2Graph {
         OWLReasonerConfiguration config = new SimpleConfiguration(
             progressMonitor
         );
-        OWLReasoner reasoner = reasonerFactory.createReasoner(ontology, config);
+        OWLReasoner reasoner = reasonerFactory.createReasoner(this.ontology, config);
         reasoner.precomputeInferences();
 
         if (!reasoner.isConsistent()) {
@@ -245,45 +274,28 @@ public class Owl2Graph {
                 ONTOLOGY_NODE_LABEL,
                 this.ontUri,
                 "uri",
-                ontology.getOntologyID().getOntologyIRI().toString()
+                this.ontology.getOntologyID().getOntologyIRI().toString()
             );
 
             // Create root node "owl:Thing"
-            createNode(
-                CLASS_NODE_LABEL,
-                ROOT_CLASS_ONT_ID,
-                ROOT_CLASS_URI
-            );
+//            createNode(
+//                CLASS_NODE_LABEL,
+//                ROOT_CLASS_ONT_ID,
+//                ROOT_CLASS_URI
+//            );
 
-            for (OWLClass c :ontology.getClassesInSignature(true)) {
+            // Get all all ontologies being imported via `owl:import` plus the _root_ ontology itself.
+            //Set<OWLOntology> ontologies = this.ontology.getImportsClosure();
+
+
+            for (OWLClass c: this.ontology.getClassesInSignature()) {
                 String classString = c.toString();
                 String classUri = this.extractUri(classString);
                 String classOntID = this.getOntID(classUri);
 
                 createNode(CLASS_NODE_LABEL, classOntID, classUri);
 
-                // Get properties/annotations of that class
-                for (OWLAnnotation annotation : c.getAnnotations(ontology, datafactory.getRDFSLabel())) {
-                    if (annotation.getValue() instanceof OWLLiteral) {
-                        OWLLiteral val = (OWLLiteral) annotation.getValue();
-                        // Store escaped literal
-                        setProperty(
-                            CLASS_NODE_LABEL,
-                            classUri,
-                            "rdfs:label",
-                            val.getLiteral().replace("'", "\\'")
-                        );
-                        String lang = val.getLang();
-                        if (lang.length() > 0) {
-                            setProperty(
-                                CLASS_NODE_LABEL,
-                                classUri,
-                                "labelLang",
-                                val.getLang()
-                            );
-                        }
-                    }
-                }
+                this.storeLabel(c, classUri);
 
                 NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
 
@@ -296,10 +308,8 @@ public class Owl2Graph {
                         "rdfs:subClassOf"
                     );
                 } else {
-                    for (org.semanticweb.owlapi.reasoner.Node<OWLClass>
-                        parentOWLNode: superclasses) {
-                        OWLClassExpression parent =
-                            parentOWLNode.getRepresentativeElement();
+                    for (Node<OWLClass> parentOWLNode: superclasses) {
+                        OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
                         String parentString = parent.toString();
                         String parentUri = this.extractUri(parentString);
                         String parentOntID = this.getOntID(parentUri);
@@ -319,8 +329,32 @@ public class Owl2Graph {
                     }
                 }
 
-                for (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual> in
-                    : reasoner.getInstances(c, true)) {
+                Set<OWLClass> equivalentClasses = getEquivalentClasses(reasoner, c);
+
+                for (OWLClass ec : equivalentClasses) {
+                    String ecString = ec.toString();
+                    String ecUri = this.extractUri(ecString);
+                    String ecOntID = this.getOntID(ecUri);
+
+                    if (!ecUri.equals(classUri)) {
+                        createNode(
+                            CLASS_NODE_LABEL,
+                            ecOntID,
+                            ecUri
+                        );
+
+                        createRelationship(
+                            CLASS_NODE_LABEL,
+                            ecUri,
+                            CLASS_NODE_LABEL,
+                            classUri,
+                            "owl:equivalentClass"
+                        );
+                    }
+
+                }
+
+                for (Node<OWLNamedIndividual> in: reasoner.getInstances(c, true)) {
                     OWLNamedIndividual i = in.getRepresentativeElement();
                     String indString = i.toString();
                     String indUri = this.extractUri(indString);
@@ -374,7 +408,7 @@ public class Owl2Graph {
                     for (OWLDataPropertyExpression dataProperty :
                         ontology.getDataPropertiesInSignature()) {
                         for (OWLLiteral object: reasoner.getDataPropertyValues(
-                                i, dataProperty.asOWLDataProperty())) {
+                            i, dataProperty.asOWLDataProperty())) {
                             String propertyString =
                                 dataProperty.asOWLDataProperty().toString();
                             String propertyUri = this.extractUri(propertyString);
@@ -470,6 +504,62 @@ public class Owl2Graph {
             idSpace = idSpace + ":";
         }
         return idSpace + classOntID;
+    }
+
+    private Label getLabel (OWLClass c, OWLOntology ont) {
+        Label classLabel = new Label(null, null);
+        for (OWLAnnotation annotation : c.getAnnotations(ont, this.datafactory.getRDFSLabel())) {
+            if (annotation.getValue() instanceof OWLLiteral) {
+                OWLLiteral val = (OWLLiteral) annotation.getValue();
+
+                classLabel.setText(val.getLiteral().replace("'", "\\'"));
+                classLabel.setLang(val.getLang());
+            }
+        }
+        return classLabel;
+    }
+
+    private void storeLabel (OWLClass c, String classUri) {
+        Label classLabel = this.getLabel(c, this.ontology);
+
+        if (StringUtils.isNotEmpty(classLabel.text)) {
+            Set<OWLOntology> importedOntologies = this.ontology.getImports();
+            for (OWLOntology ont: importedOntologies) {
+                classLabel = this.getLabel(c, ont);
+                if (StringUtils.isNotEmpty(classLabel.text)) {
+                    break;
+                }
+            }
+        }
+
+        if (StringUtils.isNotEmpty(classLabel.text)) {
+            setProperty(
+                CLASS_NODE_LABEL,
+                classUri,
+                "rdfs:label",
+                classLabel.text
+            );
+        }
+
+        if (StringUtils.isNotEmpty(classLabel.lang)) {
+            setProperty(
+                CLASS_NODE_LABEL,
+                classUri,
+                "labelLang",
+                classLabel.lang
+            );
+        }
+    }
+
+    private Set<OWLClass> getEquivalentClasses (OWLReasoner reasoner, OWLClass c) {
+        Node<OWLClass> equivalentClasses = reasoner.getEquivalentClasses(c);
+        Set<OWLClass> results;
+        if (!c.isAnonymous()) {
+            results = equivalentClasses.getEntities();
+        } else {
+            results = equivalentClasses.getEntitiesMinus(c.asOWLClass());
+        }
+        return results;
     }
 
     private void initTransaction () {
@@ -668,7 +758,6 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("user")
             .desc("Neo4J user name")
             .build();
@@ -678,7 +767,6 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("password")
             .desc("Neo4J user password")
             .build();
@@ -752,7 +840,7 @@ public class Owl2Graph {
         String footer = "\nPlease report issues at http://github.com/flekschas/owl2neo4j/issues";
 
         HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java -jar Owl2Graph.jar", header, options, footer, true);
+        formatter.printHelp("java -jar owl2neo4j.jar", header, options, footer, true);
     }
 
     /**
