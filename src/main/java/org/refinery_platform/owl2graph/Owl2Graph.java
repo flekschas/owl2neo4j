@@ -840,7 +840,7 @@ public class Owl2Graph {
         String footer = "\nPlease report issues at http://github.com/flekschas/owl2neo4j/issues";
 
         HelpFormatter formatter = new HelpFormatter();
-        formatter.printHelp("java -jar Owl2Graph.jar", header, options, footer, true);
+        formatter.printHelp("java -jar owl2neo4j.jar", header, options, footer, true);
     }
 
     /**

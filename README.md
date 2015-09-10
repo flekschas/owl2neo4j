@@ -4,6 +4,8 @@ Convert [OWL](owl) to labeled property graph and import into [Neo4J](neo4j).
 
 ## Build
 
+Each release has a precompiled JAR attached. To build the manually JAR file  follow the three steps below. The JAR file will be located in `dist`.
+
 **Requirements**:
 
 * [Java RE 7](jre7)
@@ -28,7 +30,7 @@ $ java -jar ./build/libs/owl2neo4j.jar -o pizza.owl -n "Pizza Ontology" -a pizza
 **Command line options**:
 
 ```
-usage: java -jar Owl2Graph.jar -a <String> [-h] -n <String> -o <Path> -p
+usage: java -jar owl2neo4j.jar -a <String> [-h] -n <String> -o <Path> -p
        <String> -s <URL> -u <String> [-v] [--version]
 Import OWL into Neo4J as a labeled property graph.
 
