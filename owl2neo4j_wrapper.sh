@@ -1,4 +1,4 @@
 #!/bin/bash
 
-exec java -jar "$0" "$@"
+exec java -jar -DentityExpansionLimit=1000000 "$0" "$@"
 exit
