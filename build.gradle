@@ -3,7 +3,7 @@ apply plugin: 'idea'
 
 version = '0.2.0'
 
-libsDirName = './dist'
+libsDirName = '../dist'
 
 repositories {
     mavenCentral()
@@ -21,14 +21,14 @@ dependencies {
 }
 
 jar {
-    archiveName = baseName + '.' + extension
+    archiveName = 'owl2neo4j.' + extension
     // Create a 'fat' jar by including all dependencies
     from {
         configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
     }
     manifest {
         attributes('Main-Class': 'org.refinery_platform.owl2graph.Owl2Graph',
-                   'Implementation-Title': 'OWL 2 Graph',
+                   'Implementation-Title': 'OWL 2 Neo4J',
                    'Implementation-Version': version)
     }
 }
