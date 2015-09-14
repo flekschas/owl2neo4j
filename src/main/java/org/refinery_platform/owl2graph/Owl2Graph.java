@@ -522,7 +522,7 @@ public class Owl2Graph {
     private void storeLabel (OWLClass c, String classUri) {
         Label classLabel = this.getLabel(c, this.ontology);
 
-        if (StringUtils.isNotEmpty(classLabel.text)) {
+        if (StringUtils.isEmpty(classLabel.text)) {
             Set<OWLOntology> importedOntologies = this.ontology.getImports();
             for (OWLOntology ont: importedOntologies) {
                 classLabel = this.getLabel(c, ont);
@@ -748,9 +748,8 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("server")
-            .desc("Neo4J server root URL")
+            .desc("Neo4J server root URL [Default: http://localhost:7474]")
             .build();
 
         Option user = Option.builder("u")
@@ -815,11 +814,13 @@ public class Owl2Graph {
 
         try {
             cl = new DefaultParser().parse(call_options, args);
+
             this.path_to_owl = cl.getOptionValue("o");
-            this.server_root_url = cl.getOptionValue("s").substring(0, cl.getOptionValue("s").length() - (cl.getOptionValue("s").endsWith("/") ? 1 : 0));
             this.ontology_name = cl.getOptionValue("n");
             this.ontology_acronym = cl.getOptionValue("a");
+            this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
             this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
+
             if (cl.hasOption("v")) {
                 this.verbose_output = true;
             }
