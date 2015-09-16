@@ -751,11 +751,12 @@ public class Owl2Graph {
             JSONArray errors = (JSONArray) jsonResponse.get("errors");
             if (errors.length() > 0) {
                 JSONObject error = (JSONObject) errors.get(0);
+                String errorCode = error.get("code").toString();
                 String errorMsg = error.get("message").toString();
                 if (this.verbose_output) {
-                    errorMsg = response.getBody().toString();
+                    errorCode += ": \"" + errorMsg + "\"";
                 }
-                throw new Exception(errorMsg);
+                throw new Exception(errorCode);
             }
         } catch (Exception e) {
             print_error("Error committing transaction");
