@@ -779,7 +779,8 @@ public class Owl2Graph {
                 System.out.println("CQL: `" + cql + "` [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
                 this.cqlLogger.info(cql);
             }
-        } catch (UnirestException e) {
+            checkForError(response);
+        } catch (Exception e) {
             print_error("Error creating a node");
             print_error(e.getMessage());
             System.exit(1);
@@ -797,7 +798,8 @@ public class Owl2Graph {
                 System.out.println("CQL: `" + cql + "`  [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
                 this.cqlLogger.info(cql);
             }
-        } catch (UnirestException e) {
+            checkForError(response);
+        } catch (Exception e) {
             print_error("Error creating a relationship");
             print_error(e.getMessage());
             System.exit(1);
@@ -815,7 +817,8 @@ public class Owl2Graph {
                 System.out.println("CQL: `" + cql + "` [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
                 this.cqlLogger.info(cql);
             }
-        } catch (UnirestException e) {
+            checkForError(response);
+        } catch (Exception e) {
             print_error("Error creating a node property");
             print_error(e.getMessage());
             System.exit(1);
