@@ -4,6 +4,7 @@ package org.refinery_platform.owl2graph;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.util.OWLClassExpressionVisitorAdapter;
 
 /** Reasoner */
 import org.semanticweb.HermiT.Reasoner;
@@ -25,7 +26,11 @@ import org.json.JSONObject;
 import org.json.JSONArray;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
+import java.util.Map.Entry;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
@@ -56,9 +61,12 @@ public class Owl2Graph {
     private String server_root_url;
     private String neo4j_authentication_header;
     private String transaction;
+    private Set<String> eqps;  // Existential quantification property strings
+    private Set<OWLObjectPropertyExpression> eqp;  // Existential quantification properties
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
+    private Set<OWLOntology> ontologies;
     private IRI documentIRI;
     private OWLDataFactory datafactory;
     private String ontUri;
@@ -98,6 +106,69 @@ public class Owl2Graph {
 
         public void setText (String text) {
             this.text = text;
+        }
+    }
+
+    /**
+     * Tiny class for storing pairs
+     * @param <X>
+     * @param <Y>
+     */
+    public static class Tuple<X, Y> {
+        public final X x;
+        public final Y y;
+        public Tuple(X x, Y y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        @Override
+        public String toString() {
+            return "(" + x + ", " + y + ")";
+        }
+    }
+
+    /**
+     * Visits existential restrictions and collects the properties which are
+     * restricted.
+     */
+    private static class RestrictionVisitor extends OWLClassExpressionVisitorAdapter {
+
+        private final Set<OWLClass> processedClasses;
+        private final Set<Tuple> restrictions;
+        private final Set<OWLOntology> ontologies;
+
+        public RestrictionVisitor(Set<OWLOntology> ontologies) {
+            restrictions = new HashSet<Tuple>();
+            processedClasses = new HashSet<OWLClass>();
+            this.ontologies = ontologies;
+        }
+
+        public Set<Tuple> getRestrictions () {
+            return restrictions;
+        }
+
+        @Override
+        public void visit(OWLClass clazz) {
+            if (!processedClasses.contains(clazz)) {
+                // If we are processing inherited restrictions then we
+                // recursively visit named supers. Note that we need to keep
+                // track of the classes that we have processed so that we don't
+                // get caught out by cycles in the taxonomy
+                processedClasses.add(clazz);
+                for (OWLOntology ontology: ontologies) {
+                    for (OWLSubClassOfAxiom ax : ontology.getSubClassAxiomsForSubClass(clazz)) {
+                        ax.getSuperClass().accept(this);
+                    }
+                }
+            }
+        }
+
+        @Override
+        public void visit(OWLObjectSomeValuesFrom clazz) {
+            // This method gets called when a class expression is an existential
+            // (someValuesFrom) restriction and it asks us to visit it
+            restrictions.add(new Tuple(clazz.getProperty(), clazz.getFiller().asOWLClass()));
         }
     }
 
@@ -212,6 +283,10 @@ public class Owl2Graph {
         this.datafactory = OWLManager.getOWLDataFactory();
         this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
 
+        // Get all ontologies being imported via `owl:import` including the _root_ ontology itself, i.e. the _root_
+        // ontology refers to the ontology we are specified when calling this tool.
+        this.ontologies = this.ontology.getImportsClosure();
+
         System.out.println("Ontology Loaded...");
         System.out.println("Document IRI: " + documentIRI);
         System.out.println("Ontology    : " + this.ontUri);
@@ -278,28 +353,41 @@ public class Owl2Graph {
             );
 
             // Create root node "owl:Thing"
-//            createNode(
-//                CLASS_NODE_LABEL,
-//                ROOT_CLASS_ONT_ID,
-//                ROOT_CLASS_URI
-//            );
+            createNode(
+                CLASS_NODE_LABEL,
+                ROOT_CLASS_ONT_ID,
+                ROOT_CLASS_URI
+            );
 
-            // Get all all ontologies being imported via `owl:import` plus the _root_ ontology itself.
-            //Set<OWLOntology> ontologies = this.ontology.getImportsClosure();
-
+            if (!this.eqps.isEmpty()) {
+                this.eqp = new HashSet<>();
+                for (String property: this.eqps) {
+                    this.eqp.add(this.datafactory.getOWLObjectProperty(IRI.create(property)));
+                }
+            }
 
             for (OWLClass c: this.ontology.getClassesInSignature()) {
+                // Skip unsatisfiable classes like `owl:Nothing`.
+                if (!reasoner.isSatisfiable(c)) {
+                    continue;
+                }
+
                 String classString = c.toString();
                 String classUri = this.extractUri(classString);
                 String classOntID = this.getOntID(classUri);
+
+                String superClassString;
+                String superClassUri;
+                String superClassOntID;
 
                 createNode(CLASS_NODE_LABEL, classOntID, classUri);
 
                 this.storeLabel(c, classUri);
 
-                NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
+                // A node set is a set of nodes.
+                NodeSet<OWLClass> superClassNodeSet = reasoner.getSuperClasses(c, true);
 
-                if (superclasses.isEmpty()) {
+                if (superClassNodeSet.isEmpty()) {
                     createRelationship(
                         CLASS_NODE_LABEL,
                         classUri,
@@ -308,24 +396,70 @@ public class Owl2Graph {
                         "rdfs:subClassOf"
                     );
                 } else {
-                    for (Node<OWLClass> parentOWLNode: superclasses) {
-                        OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
-                        String parentString = parent.toString();
-                        String parentUri = this.extractUri(parentString);
-                        String parentOntID = this.getOntID(parentUri);
+                    // A node is a set of equivalent OWLClasses.
+                    // http://owlapi.sourceforge.net/javadoc/org/semanticweb/owlapi/reasoner/Node.html
+                    for (Node<OWLClass> superClassNode: superClassNodeSet) {
+                        // OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
 
-                        createNode(
-                            CLASS_NODE_LABEL,
-                            parentOntID,
-                            parentUri
-                        );
-                        createRelationship(
-                            CLASS_NODE_LABEL,
-                            classUri,
-                            CLASS_NODE_LABEL,
-                            parentUri,
-                            "rdfs:subClassOf"
-                        );
+                        // We iterate over all superclasses except unsatisfiable classes, e.g. owl:Nothing and other
+                        // classes equivalent to it.
+                        for (OWLClass superClass: superClassNode.getEntitiesMinusBottom()) {
+                            superClassString = superClass.toString();
+                            superClassUri = this.extractUri(superClassString);
+                            superClassOntID = this.getOntID(superClassUri);
+
+                            createNode(
+                                CLASS_NODE_LABEL,
+                                superClassOntID,
+                                superClassUri
+                            );
+
+                            createRelationship(
+                                CLASS_NODE_LABEL,
+                                classUri,
+                                CLASS_NODE_LABEL,
+                                superClassUri,
+                                "rdfs:subClassOf"
+                            );
+                        }
+                    }
+                }
+
+                if (!this.eqp.isEmpty()) {
+                    // Create a visitor for extracting existential restrictions they can be seen as some sort of class
+                    // property.
+                    // http://www.w3.org/TR/2004/REC-owl-guide-20040210/#PropertyRestrictions
+                    RestrictionVisitor restrictionVisitor = new RestrictionVisitor(Collections.singleton(this.ontology));
+
+                    // Get all subclass axioms for the current class
+                    for (OWLSubClassOfAxiom axiom : this.ontology.getSubClassAxiomsForSubClass(c)) {
+                        // Get all superclasses based on the axiom, which includes superclasses based on existential
+                        // restrictions.
+                        OWLClassExpression superClasses = axiom.getSuperClass();
+                        // Ask our superclass to accept a visit from the RestrictionVisitor
+                        superClasses.accept(restrictionVisitor);
+                    }
+
+                    for (Tuple restriction: restrictionVisitor.getRestrictions()) {
+                        if (this.eqp.contains(restriction.x)) {
+                            superClassString = restriction.y.toString();
+                            superClassUri = this.extractUri(superClassString);
+                            superClassOntID = this.getOntID(superClassUri);
+
+                            createNode(
+                                CLASS_NODE_LABEL,
+                                superClassOntID,
+                                superClassUri
+                            );
+
+                            createRelationship(
+                                CLASS_NODE_LABEL,
+                                superClassUri,
+                                CLASS_NODE_LABEL,
+                                classUri,
+                                this.getOntID(this.extractUri(restriction.x.toString()))
+                            );
+                        }
                     }
                 }
 
@@ -770,6 +904,15 @@ public class Owl2Graph {
             .desc("Neo4J user password")
             .build();
 
+        Option eqp = Option.builder()
+            .argName("String")
+            .hasArg()
+            .numberOfArgs(Option.UNLIMITED_VALUES)
+            .type(String.class)
+            .longOpt("eqp")
+            .desc("Existential quantification property (E.g. http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping)")
+            .build();
+
         all_options.addOption(help);
         all_options.addOption(version);
         all_options.addOption(verbosity);
@@ -779,6 +922,7 @@ public class Owl2Graph {
         all_options.addOption(server);
         all_options.addOption(user);
         all_options.addOption(password);
+        all_options.addOption(eqp);
 
         meta_options.addOption(help);
         meta_options.addOption(version);
@@ -790,6 +934,7 @@ public class Owl2Graph {
         call_options.addOption(user);
         call_options.addOption(password);
         call_options.addOption(verbosity);
+        call_options.addOption(eqp);
 
         try {
             // Parse only for meta options, e.g. `-h` and `-v`
@@ -820,6 +965,10 @@ public class Owl2Graph {
             this.ontology_acronym = cl.getOptionValue("a");
             this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
             this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
+
+            if (cl.hasOption("eqp")) {
+                this.eqps = new HashSet<>(Arrays.asList(cl.getOptionValues("eqp")));
+            }
 
             if (cl.hasOption("v")) {
                 this.verbose_output = true;
