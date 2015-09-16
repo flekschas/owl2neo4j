@@ -726,8 +726,9 @@ public class Owl2Graph {
                     "]"
                 );
             }
+            checkForError(response);
         } catch (Exception e) {
-            print_error("Error starting transaction");
+            print_error("Error initiating transaction");
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -747,21 +748,21 @@ public class Owl2Graph {
                     "]"
                 );
             }
-            JSONObject jsonResponse = response.getBody().getObject();
-            JSONArray errors = (JSONArray) jsonResponse.get("errors");
-            if (errors.length() > 0) {
-                JSONObject error = (JSONObject) errors.get(0);
-                String errorCode = error.get("code").toString();
-                String errorMsg = error.get("message").toString();
-                if (this.verbose_output) {
-                    errorCode += ": \"" + errorMsg + "\"";
-                }
-                throw new Exception(errorCode);
-            }
+            checkForError(response);
         } catch (Exception e) {
             print_error("Error committing transaction");
             print_error(e.getMessage());
             System.exit(1);
+        }
+    }
+
+    private static void checkForError (HttpResponse<JsonNode> response) throws Exception {
+        JSONObject jsonResponse = response.getBody().getObject();
+        JSONArray errors = (JSONArray) jsonResponse.get("errors");
+        if (errors.length() > 0) {
+            JSONObject error = (JSONObject) errors.get(0);
+            String errorMsg = error.get("code").toString() + ": \"" + error.get("message").toString() + "\"";
+            throw new Exception(errorMsg);
         }
     }
 
