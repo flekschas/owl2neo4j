@@ -19,7 +19,6 @@ import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.Headers;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.HttpResponse;
-import com.mashape.unirest.http.exceptions.UnirestException;
 
 /** JSON **/
 import org.json.JSONObject;
@@ -29,7 +28,6 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.Map.Entry;
 import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
