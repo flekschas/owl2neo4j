@@ -454,9 +454,9 @@ public class Owl2Graph {
 
                             createRelationship(
                                 CLASS_NODE_LABEL,
-                                superClassUri,
-                                CLASS_NODE_LABEL,
                                 classUri,
+                                CLASS_NODE_LABEL,
+                                superClassUri,
                                 this.getOntID(this.extractUri(restriction.x.toString()))
                             );
                         }
