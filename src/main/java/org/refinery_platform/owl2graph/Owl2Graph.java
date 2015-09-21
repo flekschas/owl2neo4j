@@ -23,6 +23,8 @@ import com.mashape.unirest.http.HttpResponse;
 /** JSON **/
 import org.json.JSONObject;
 import org.json.JSONArray;
+import javax.json.Json;
+import javax.json.JsonObject;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -166,7 +168,9 @@ public class Owl2Graph {
         public void visit(OWLObjectSomeValuesFrom clazz) {
             // This method gets called when a class expression is an existential
             // (someValuesFrom) restriction and it asks us to visit it
-            restrictions.add(new Tuple(clazz.getProperty(), clazz.getFiller().asOWLClass()));
+            if (! clazz.getFiller().isAnonymous()) {
+                restrictions.add(new Tuple(clazz.getProperty(), clazz.getFiller().asOWLClass()));
+            }
         }
     }
 
@@ -768,18 +772,33 @@ public class Owl2Graph {
         // Uniqueness for Class nodes needs to be defined before
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
+        String cql = "MERGE (n:`" + classLabel + "`:`" + this.ontology_acronym + "` {name:{classOntID}, uri:{classUri}});";
         try {
-            String cql = "MERGE (n:" + classLabel + ":" + this.ontology_acronym + " {name:'" + classOntID + "',uri:'" + classUri + "'});";
+            JsonObject json = Json.createObjectBuilder()
+                .add("statements", Json.createArrayBuilder()
+                        .add(Json.createObjectBuilder()
+                                .add("statement", cql)
+                                .add("parameters", Json.createObjectBuilder()
+                                        .add("classOntID", classOntID)
+                                        .add("classUri", classUri)
+                                )
+                        )
+                )
+                .build();
+
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                .body(json.toString())
                     .asJson();
+
             if (this.verbose_output) {
-                System.out.println("CQL: `" + cql + "` [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
-                this.cqlLogger.info(cql);
+                System.out.println("CQL: " + json);
+                this.cqlLogger.info(json.toString());
             }
+
             checkForError(response);
         } catch (Exception e) {
             print_error("Error creating a node");
+            print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -787,18 +806,33 @@ public class Owl2Graph {
 
     private void createRelationship (String srcLabel, String srcUri, String destLabel, String destUri, String relationship) {
         // Example: cypher/createRelationship.cql
+        String cql = "MATCH (src:`" + srcLabel + "` {uri:{srcUri}}), (dest:`" + destLabel + "` {uri:{destUri}}) MERGE (src)-[:`" + relationship + "`]->(dest);";
         try {
-            String cql = "MATCH (src:" + srcLabel + " {uri:'" + srcUri + "'}), (dest:" + destLabel + " {uri:'" + destUri + "'}) MERGE (src)-[:`" + relationship + "`]->(dest);";
+            JsonObject json = Json.createObjectBuilder()
+                .add("statements", Json.createArrayBuilder()
+                        .add(Json.createObjectBuilder()
+                                .add("statement", cql)
+                                .add("parameters", Json.createObjectBuilder()
+                                        .add("srcUri", srcUri)
+                                        .add("destUri", destUri)
+                                )
+                        )
+                )
+                .build();
+
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                    .body(json.toString())
                     .asJson();
+
             if (this.verbose_output) {
-                System.out.println("CQL: `" + cql + "`  [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
-                this.cqlLogger.info(cql);
+                System.out.println("CQL: " + json);
+                this.cqlLogger.info(json.toString());
             }
+
             checkForError(response);
         } catch (Exception e) {
             print_error("Error creating a relationship");
+            print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -806,18 +840,33 @@ public class Owl2Graph {
 
     private void setProperty (String classLabel, String classUri, String propertyName, String propertyValue) {
         // Example: cypher/setProperty.cql
+        String cql = "MATCH (n:`" + classLabel + "` {uri:{classUri}}) SET n.`" + propertyName + "` = {propertyValue};";
         try {
-            String cql = "MATCH (n:" + classLabel + " {uri:'" + classUri + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';";
+            JsonObject json = Json.createObjectBuilder()
+                .add("statements", Json.createArrayBuilder()
+                    .add(Json.createObjectBuilder()
+                        .add("statement", cql)
+                        .add("parameters", Json.createObjectBuilder()
+                                .add("classUri", classUri)
+                            .add("propertyValue", propertyValue)
+                        )
+                    )
+                )
+                .build();
+
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                    .body(json.toString())
                     .asJson();
+
             if (this.verbose_output) {
-                System.out.println("CQL: `" + cql + "` [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
-                this.cqlLogger.info(cql);
+                System.out.println("CQL: " + json);
+                this.cqlLogger.info(json.toString());
             }
+
             checkForError(response);
         } catch (Exception e) {
             print_error("Error creating a node property");
+            print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -825,6 +874,7 @@ public class Owl2Graph {
 
     /**
      * Command line parser
+     *
      * @param args
      */
     private void parseCommandLineArguments(String[] args)
@@ -965,7 +1015,7 @@ public class Owl2Graph {
 
             this.path_to_owl = cl.getOptionValue("o");
             this.ontology_name = cl.getOptionValue("n");
-            this.ontology_acronym = cl.getOptionValue("a");
+            this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
             this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
             this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
 
