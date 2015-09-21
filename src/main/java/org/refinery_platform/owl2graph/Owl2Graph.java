@@ -148,7 +148,7 @@ public class Owl2Graph {
             return restrictions;
         }
 
-        @Override
+/*        @Override
         public void visit(OWLClass clazz) {
             if (!processedClasses.contains(clazz)) {
                 // If we are processing inherited restrictions then we
@@ -157,12 +157,15 @@ public class Owl2Graph {
                 // get caught out by cycles in the taxonomy
                 processedClasses.add(clazz);
                 for (OWLOntology ontology: ontologies) {
-                    for (OWLSubClassOfAxiom ax : ontology.getSubClassAxiomsForSubClass(clazz)) {
-                        ax.getSuperClass().accept(this);
+                    for (OWLSubClassOfAxiom axiom: ontology.getSubClassAxiomsForSubClass(clazz)) {
+                        if (clazz.equals("<http://purl.obolibrary.org/obo/CL_0002377>")) {
+                            System.out.println("CL_0002377 AXIOM INNER: " + axiom);
+                        }
+                        axiom.getSuperClass().accept(this);
                     }
                 }
             }
-        }
+        }*/
 
         @Override
         public void visit(OWLObjectSomeValuesFrom clazz) {
@@ -289,7 +292,7 @@ public class Owl2Graph {
         // ontology refers to the ontology we are specified when calling this tool.
         this.ontologies = this.ontology.getImportsClosure();
 
-        System.out.println("Ontology Loaded...");
+        System.out.println("Ontology Loading...");
         System.out.println("Document IRI: " + documentIRI);
         System.out.println("Ontology    : " + this.ontUri);
     }
@@ -297,10 +300,15 @@ public class Owl2Graph {
     private void importOntology() throws Exception
     {
         OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
-        ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor();
-        OWLReasonerConfiguration config = new SimpleConfiguration(
-            progressMonitor
-        );
+        OWLReasonerConfiguration config;
+        if (this.verbose_output) {
+            ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor();
+            config = new SimpleConfiguration(
+                progressMonitor
+            );
+        } else {
+            config = new SimpleConfiguration();
+        }
         OWLReasoner reasoner = reasonerFactory.createReasoner(this.ontology, config);
         reasoner.precomputeInferences();
 
@@ -317,9 +325,7 @@ public class Owl2Graph {
                 this.cqlLogger.addHandler(fh);
                 SimpleFormatter formatter = new SimpleFormatter();
                 fh.setFormatter(formatter);
-            } catch (SecurityException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
@@ -395,7 +401,7 @@ public class Owl2Graph {
                         classUri,
                         CLASS_NODE_LABEL,
                         ROOT_CLASS_URI,
-                        "rdfs:subClassOf"
+                        "RDFS:subClassOf"
                     );
                 } else {
                     // A node is a set of equivalent OWLClasses.
@@ -421,7 +427,7 @@ public class Owl2Graph {
                                 classUri,
                                 CLASS_NODE_LABEL,
                                 superClassUri,
-                                "rdfs:subClassOf"
+                                "RDFS:subClassOf"
                             );
                         }
                     }
@@ -434,12 +440,12 @@ public class Owl2Graph {
                     RestrictionVisitor restrictionVisitor = new RestrictionVisitor(Collections.singleton(this.ontology));
 
                     // Get all subclass axioms for the current class
-                    for (OWLSubClassOfAxiom axiom : this.ontology.getSubClassAxiomsForSubClass(c)) {
+                    for (OWLSubClassOfAxiom axiom: this.ontology.getSubClassAxiomsForSubClass(c)) {
                         // Get all superclasses based on the axiom, which includes superclasses based on existential
                         // restrictions.
-                        OWLClassExpression superClasses = axiom.getSuperClass();
+                        OWLClassExpression superClass = axiom.getSuperClass();
                         // Ask our superclass to accept a visit from the RestrictionVisitor
-                        superClasses.accept(restrictionVisitor);
+                        superClass.accept(restrictionVisitor);
                     }
 
                     for (Tuple restriction: restrictionVisitor.getRestrictions()) {
@@ -484,7 +490,7 @@ public class Owl2Graph {
                             ecUri,
                             CLASS_NODE_LABEL,
                             classUri,
-                            "owl:equivalentClass"
+                            "OWL:equivalentClass"
                         );
                     }
 
@@ -713,11 +719,6 @@ public class Owl2Graph {
                     location.lastIndexOf("/"),
                     location.length() -1
                 );
-                System.out.println(
-                    "Transaction Sting: '" +
-                    this.transaction +
-                    "'"
-                );
             }
             if (this.verbose_output) {
                 System.out.println(
@@ -741,13 +742,13 @@ public class Owl2Graph {
         try {
             HttpResponse<JsonNode> response = Unirest.post(
                 this.server_root_url + TRANSACTION_ENDPOINT + this.transaction + "/commit")
-                    .body("{\"statements\":[]}")
+                .body("{\"statements\":[]}")
                     .asJson();
             if (this.verbose_output) {
                 System.out.println(
                     "Transaction committed. [Neo4J status:" +
-                    Integer.toString(response.getStatus()) +
-                    "]"
+                        Integer.toString(response.getStatus()) +
+                        "]"
                 );
             }
             checkForError(response);
