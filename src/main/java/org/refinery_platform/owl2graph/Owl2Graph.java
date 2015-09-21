@@ -79,6 +79,7 @@ public class Owl2Graph {
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_YELLOW = "\u001B[33m";
+    public static final String ANSI_DIM = "\u001B[2m";
 
     public static final String VERSION = "0.1.0";
 
@@ -134,38 +135,15 @@ public class Owl2Graph {
      */
     private static class RestrictionVisitor extends OWLClassExpressionVisitorAdapter {
 
-        private final Set<OWLClass> processedClasses;
         private final Set<Tuple> restrictions;
-        private final Set<OWLOntology> ontologies;
 
-        public RestrictionVisitor(Set<OWLOntology> ontologies) {
-            restrictions = new HashSet<Tuple>();
-            processedClasses = new HashSet<OWLClass>();
-            this.ontologies = ontologies;
+        public RestrictionVisitor() {
+            restrictions = new HashSet<>();
         }
 
         public Set<Tuple> getRestrictions () {
             return restrictions;
         }
-
-/*        @Override
-        public void visit(OWLClass clazz) {
-            if (!processedClasses.contains(clazz)) {
-                // If we are processing inherited restrictions then we
-                // recursively visit named supers. Note that we need to keep
-                // track of the classes that we have processed so that we don't
-                // get caught out by cycles in the taxonomy
-                processedClasses.add(clazz);
-                for (OWLOntology ontology: ontologies) {
-                    for (OWLSubClassOfAxiom axiom: ontology.getSubClassAxiomsForSubClass(clazz)) {
-                        if (clazz.equals("<http://purl.obolibrary.org/obo/CL_0002377>")) {
-                            System.out.println("CL_0002377 AXIOM INNER: " + axiom);
-                        }
-                        axiom.getSuperClass().accept(this);
-                    }
-                }
-            }
-        }*/
 
         @Override
         public void visit(OWLObjectSomeValuesFrom clazz) {
@@ -191,12 +169,21 @@ public class Owl2Graph {
 
         // Test if server is available
         try {
+            if (ont.verbose_output) {
+                System.out.println("Checking availability of Neo4J... " + ANSI_DIM);
+            } else {
+                System.out.print("Checking availability of Neo4J... ");
+            }
+
             HttpResponse<JsonNode> response = Unirest.get(
                 ont.server_root_url
             ).asJson();
-            System.out.println(
-                "Neo4J status: " + Integer.toString(response.getStatus())
-            );
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Checking availability of Neo4J... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error querying Neo4J server root URL");
             print_error(e.getMessage());
@@ -205,13 +192,21 @@ public class Owl2Graph {
 
         // Try authentication
         try {
+            if (ont.verbose_output) {
+                System.out.println("Checking credentials for Neo4J... " + ANSI_DIM);
+            } else {
+                System.out.print("Checking credentials for Neo4J... ");
+            }
+
             HttpResponse<JsonNode> response = Unirest.get(
                 ont.server_root_url + REST_ENDPOINT
             ).asJson();
-            System.out.println(
-                "REST endpoint status: " +
-                Integer.toString(response.getStatus())
-            );
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Checking credentials for Neo4J... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error querying Neo4J REST endpoint");
             print_error(e.getMessage());
@@ -222,12 +217,23 @@ public class Owl2Graph {
         double loadTimeMin = -1.0;
 
         try {
+            if (ont.verbose_output) {
+                System.out.println("Ontology loading... " + ANSI_DIM);
+            } else {
+                System.out.print("Ontology loading... ");
+            }
+
             long start = System.nanoTime();
             ont.loadOntology();
             long end = System.nanoTime();
             loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             loadTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
-            System.out.println("Successfully loaded ontology");
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Ontology loading... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error loading the ontology");
             print_error(e.getMessage());
@@ -237,12 +243,23 @@ public class Owl2Graph {
         long importTimeSec = -1;
         double importTimeMin = -1;
         try {
+            if (ont.verbose_output) {
+                System.out.println("Importing ontology... " + ANSI_DIM);
+            } else {
+                System.out.print("Importing ontology... ");
+            }
+
             long start = System.nanoTime();
             ont.importOntology();
             long end = System.nanoTime();
             importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             importTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
-            System.out.println("Successfully imported ontology");
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Importing ontology... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error importing the ontology");
             print_error(e.getMessage());
@@ -260,20 +277,20 @@ public class Owl2Graph {
 
         // Print some performance related numbers
         if (ont.verbose_output) {
-            System.out.println("-----");
+            System.out.println("---");
             System.out.println(
                 "Load time:   " +
-                Double.toString(loadTimeMin) +
-                "min (" +
-                Long.toString(loadTimeSec) +
-                "s)"
+                    Double.toString(loadTimeMin) +
+                    "min (" +
+                    Long.toString(loadTimeSec) +
+                    "s)"
             );
             System.out.println(
                 "Import time: " +
-                Double.toString(importTimeMin) +
-                "min (" +
-                Long.toString(importTimeSec) +
-                "s)");
+                    Double.toString(importTimeMin) +
+                    "min (" +
+                    Long.toString(importTimeSec) +
+                    "s)");
         }
     }
 
@@ -292,9 +309,10 @@ public class Owl2Graph {
         // ontology refers to the ontology we are specified when calling this tool.
         this.ontologies = this.ontology.getImportsClosure();
 
-        System.out.println("Ontology Loading...");
-        System.out.println("Document IRI: " + documentIRI);
-        System.out.println("Ontology    : " + this.ontUri);
+        if (this.verbose_output) {
+            System.out.println("Document IRI: " + documentIRI);
+            System.out.println("Ontology    : " + this.ontUri);
+        }
     }
 
     private void importOntology() throws Exception
@@ -313,7 +331,7 @@ public class Owl2Graph {
         reasoner.precomputeInferences();
 
         if (!reasoner.isConsistent()) {
-            throw new Exception("Ontology is inconsistent");
+            throw new Exception("Ontology is inconsistent!");
         }
 
         // Init Cypher logger
@@ -437,7 +455,7 @@ public class Owl2Graph {
                     // Create a visitor for extracting existential restrictions they can be seen as some sort of class
                     // property.
                     // http://www.w3.org/TR/2004/REC-owl-guide-20040210/#PropertyRestrictions
-                    RestrictionVisitor restrictionVisitor = new RestrictionVisitor(Collections.singleton(this.ontology));
+                    RestrictionVisitor restrictionVisitor = new RestrictionVisitor();
 
                     // Get all subclass axioms for the current class
                     for (OWLSubClassOfAxiom axiom: this.ontology.getSubClassAxiomsForSubClass(c)) {
@@ -723,10 +741,10 @@ public class Owl2Graph {
             if (this.verbose_output) {
                 System.out.println(
                     "Transaction initialized. Commit at " +
-                    location +
-                    " [Neo4J status:" +
-                    Integer.toString(response.getStatus()) +
-                    "]"
+                        location +
+                        " [Neo4J status:" +
+                        Integer.toString(response.getStatus()) +
+                        "]"
                 );
             }
             checkForError(response);
@@ -735,6 +753,10 @@ public class Owl2Graph {
             print_error(e.getMessage());
             System.exit(1);
         }
+    }
+
+    private static void printVerboseLn (String text) {
+        System.out.println(ANSI_DIM + text + ANSI_RESET);
     }
 
     private void commitTransaction () {
@@ -747,8 +769,8 @@ public class Owl2Graph {
             if (this.verbose_output) {
                 System.out.println(
                     "Transaction committed. [Neo4J status:" +
-                        Integer.toString(response.getStatus()) +
-                        "]"
+                    Integer.toString(response.getStatus()) +
+                    "]"
                 );
             }
             checkForError(response);
