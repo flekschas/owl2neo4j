@@ -4,6 +4,7 @@ package org.refinery_platform.owl2graph;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.util.OWLClassExpressionVisitorAdapter;
 
 /** Reasoner */
 import org.semanticweb.HermiT.Reasoner;
@@ -18,14 +19,18 @@ import com.mashape.unirest.http.Unirest;
 import com.mashape.unirest.http.Headers;
 import com.mashape.unirest.http.JsonNode;
 import com.mashape.unirest.http.HttpResponse;
-import com.mashape.unirest.http.exceptions.UnirestException;
 
 /** JSON **/
 import org.json.JSONObject;
 import org.json.JSONArray;
+import javax.json.Json;
+import javax.json.JsonObject;
 
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Set;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
@@ -56,9 +61,12 @@ public class Owl2Graph {
     private String server_root_url;
     private String neo4j_authentication_header;
     private String transaction;
+    private Set<String> eqps;  // Existential quantification property strings
+    private Set<OWLObjectPropertyExpression> eqp;  // Existential quantification properties
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
+    private Set<OWLOntology> ontologies;
     private IRI documentIRI;
     private OWLDataFactory datafactory;
     private String ontUri;
@@ -71,6 +79,7 @@ public class Owl2Graph {
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
     public static final String ANSI_YELLOW = "\u001B[33m";
+    public static final String ANSI_DIM = "\u001B[2m";
 
     public static final String VERSION = "0.1.0";
 
@@ -101,6 +110,51 @@ public class Owl2Graph {
         }
     }
 
+    /**
+     * Tiny class for storing pairs
+     * @param <X>
+     * @param <Y>
+     */
+    public static class Tuple<X, Y> {
+        public final X x;
+        public final Y y;
+        public Tuple(X x, Y y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        @Override
+        public String toString() {
+            return "(" + x + ", " + y + ")";
+        }
+    }
+
+    /**
+     * Visits existential restrictions and collects the properties which are
+     * restricted.
+     */
+    private static class RestrictionVisitor extends OWLClassExpressionVisitorAdapter {
+
+        private final Set<Tuple> restrictions;
+
+        public RestrictionVisitor() {
+            restrictions = new HashSet<>();
+        }
+
+        public Set<Tuple> getRestrictions () {
+            return restrictions;
+        }
+
+        @Override
+        public void visit(OWLObjectSomeValuesFrom clazz) {
+            // This method gets called when a class expression is an existential
+            // (someValuesFrom) restriction and it asks us to visit it
+            if (! clazz.getFiller().isAnonymous()) {
+                restrictions.add(new Tuple(clazz.getProperty(), clazz.getFiller().asOWLClass()));
+            }
+        }
+    }
+
     public static void main(String[] args) {
         Owl2Graph ont = new Owl2Graph(args);
 
@@ -115,12 +169,21 @@ public class Owl2Graph {
 
         // Test if server is available
         try {
+            if (ont.verbose_output) {
+                System.out.println("Checking availability of Neo4J... " + ANSI_DIM);
+            } else {
+                System.out.print("Checking availability of Neo4J... ");
+            }
+
             HttpResponse<JsonNode> response = Unirest.get(
                 ont.server_root_url
             ).asJson();
-            System.out.println(
-                "Neo4J status: " + Integer.toString(response.getStatus())
-            );
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Checking availability of Neo4J... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error querying Neo4J server root URL");
             print_error(e.getMessage());
@@ -129,13 +192,21 @@ public class Owl2Graph {
 
         // Try authentication
         try {
+            if (ont.verbose_output) {
+                System.out.println("Checking credentials for Neo4J... " + ANSI_DIM);
+            } else {
+                System.out.print("Checking credentials for Neo4J... ");
+            }
+
             HttpResponse<JsonNode> response = Unirest.get(
                 ont.server_root_url + REST_ENDPOINT
             ).asJson();
-            System.out.println(
-                "REST endpoint status: " +
-                Integer.toString(response.getStatus())
-            );
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Checking credentials for Neo4J... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error querying Neo4J REST endpoint");
             print_error(e.getMessage());
@@ -146,12 +217,23 @@ public class Owl2Graph {
         double loadTimeMin = -1.0;
 
         try {
+            if (ont.verbose_output) {
+                System.out.println("Ontology loading... " + ANSI_DIM);
+            } else {
+                System.out.print("Ontology loading... ");
+            }
+
             long start = System.nanoTime();
             ont.loadOntology();
             long end = System.nanoTime();
             loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             loadTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
-            System.out.println("Successfully loaded ontology");
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Ontology loading... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error loading the ontology");
             print_error(e.getMessage());
@@ -161,12 +243,23 @@ public class Owl2Graph {
         long importTimeSec = -1;
         double importTimeMin = -1;
         try {
+            if (ont.verbose_output) {
+                System.out.println("Importing ontology... " + ANSI_DIM);
+            } else {
+                System.out.print("Importing ontology... ");
+            }
+
             long start = System.nanoTime();
             ont.importOntology();
             long end = System.nanoTime();
             importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             importTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
-            System.out.println("Successfully imported ontology");
+
+            if (ont.verbose_output) {
+                System.out.println(ANSI_RESET + "Importing ontology... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            } else {
+                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+            }
         } catch (Exception e) {
             print_error("Error importing the ontology");
             print_error(e.getMessage());
@@ -184,20 +277,20 @@ public class Owl2Graph {
 
         // Print some performance related numbers
         if (ont.verbose_output) {
-            System.out.println("-----");
+            System.out.println("---");
             System.out.println(
                 "Load time:   " +
-                Double.toString(loadTimeMin) +
-                "min (" +
-                Long.toString(loadTimeSec) +
-                "s)"
+                    Double.toString(loadTimeMin) +
+                    "min (" +
+                    Long.toString(loadTimeSec) +
+                    "s)"
             );
             System.out.println(
                 "Import time: " +
-                Double.toString(importTimeMin) +
-                "min (" +
-                Long.toString(importTimeSec) +
-                "s)");
+                    Double.toString(importTimeMin) +
+                    "min (" +
+                    Long.toString(importTimeSec) +
+                    "s)");
         }
     }
 
@@ -212,23 +305,33 @@ public class Owl2Graph {
         this.datafactory = OWLManager.getOWLDataFactory();
         this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
 
-        System.out.println("Ontology Loaded...");
-        System.out.println("Document IRI: " + documentIRI);
-        System.out.println("Ontology    : " + this.ontUri);
+        // Get all ontologies being imported via `owl:import` including the _root_ ontology itself, i.e. the _root_
+        // ontology refers to the ontology we are specified when calling this tool.
+        this.ontologies = this.ontology.getImportsClosure();
+
+        if (this.verbose_output) {
+            System.out.println("Document IRI: " + documentIRI);
+            System.out.println("Ontology    : " + this.ontUri);
+        }
     }
 
     private void importOntology() throws Exception
     {
         OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
-        ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor();
-        OWLReasonerConfiguration config = new SimpleConfiguration(
-            progressMonitor
-        );
+        OWLReasonerConfiguration config;
+        if (this.verbose_output) {
+            ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor();
+            config = new SimpleConfiguration(
+                progressMonitor
+            );
+        } else {
+            config = new SimpleConfiguration();
+        }
         OWLReasoner reasoner = reasonerFactory.createReasoner(this.ontology, config);
         reasoner.precomputeInferences();
 
         if (!reasoner.isConsistent()) {
-            throw new Exception("Ontology is inconsistent");
+            throw new Exception("Ontology is inconsistent!");
         }
 
         // Init Cypher logger
@@ -240,9 +343,7 @@ public class Owl2Graph {
                 this.cqlLogger.addHandler(fh);
                 SimpleFormatter formatter = new SimpleFormatter();
                 fh.setFormatter(formatter);
-            } catch (SecurityException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 e.printStackTrace();
             }
         }
@@ -278,54 +379,113 @@ public class Owl2Graph {
             );
 
             // Create root node "owl:Thing"
-//            createNode(
-//                CLASS_NODE_LABEL,
-//                ROOT_CLASS_ONT_ID,
-//                ROOT_CLASS_URI
-//            );
+            createNode(
+                CLASS_NODE_LABEL,
+                ROOT_CLASS_ONT_ID,
+                ROOT_CLASS_URI
+            );
 
-            // Get all all ontologies being imported via `owl:import` plus the _root_ ontology itself.
-            //Set<OWLOntology> ontologies = this.ontology.getImportsClosure();
-
+            if (!this.eqps.isEmpty()) {
+                this.eqp = new HashSet<>();
+                for (String property: this.eqps) {
+                    this.eqp.add(this.datafactory.getOWLObjectProperty(IRI.create(property)));
+                }
+            }
 
             for (OWLClass c: this.ontology.getClassesInSignature()) {
+                // Skip unsatisfiable classes like `owl:Nothing`.
+                if (!reasoner.isSatisfiable(c)) {
+                    continue;
+                }
+
                 String classString = c.toString();
                 String classUri = this.extractUri(classString);
                 String classOntID = this.getOntID(classUri);
+
+                String superClassString;
+                String superClassUri;
+                String superClassOntID;
 
                 createNode(CLASS_NODE_LABEL, classOntID, classUri);
 
                 this.storeLabel(c, classUri);
 
-                NodeSet<OWLClass> superclasses = reasoner.getSuperClasses(c, true);
+                // A node set is a set of nodes.
+                NodeSet<OWLClass> superClassNodeSet = reasoner.getSuperClasses(c, true);
 
-                if (superclasses.isEmpty()) {
+                if (superClassNodeSet.isEmpty()) {
                     createRelationship(
                         CLASS_NODE_LABEL,
                         classUri,
                         CLASS_NODE_LABEL,
                         ROOT_CLASS_URI,
-                        "rdfs:subClassOf"
+                        "RDFS:subClassOf"
                     );
                 } else {
-                    for (Node<OWLClass> parentOWLNode: superclasses) {
-                        OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
-                        String parentString = parent.toString();
-                        String parentUri = this.extractUri(parentString);
-                        String parentOntID = this.getOntID(parentUri);
+                    // A node is a set of equivalent OWLClasses.
+                    // http://owlapi.sourceforge.net/javadoc/org/semanticweb/owlapi/reasoner/Node.html
+                    for (Node<OWLClass> superClassNode: superClassNodeSet) {
+                        // OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
 
-                        createNode(
-                            CLASS_NODE_LABEL,
-                            parentOntID,
-                            parentUri
-                        );
-                        createRelationship(
-                            CLASS_NODE_LABEL,
-                            classUri,
-                            CLASS_NODE_LABEL,
-                            parentUri,
-                            "rdfs:subClassOf"
-                        );
+                        // We iterate over all superclasses except unsatisfiable classes, e.g. owl:Nothing and other
+                        // classes equivalent to it.
+                        for (OWLClass superClass: superClassNode.getEntitiesMinusBottom()) {
+                            superClassString = superClass.toString();
+                            superClassUri = this.extractUri(superClassString);
+                            superClassOntID = this.getOntID(superClassUri);
+
+                            createNode(
+                                CLASS_NODE_LABEL,
+                                superClassOntID,
+                                superClassUri
+                            );
+
+                            createRelationship(
+                                CLASS_NODE_LABEL,
+                                classUri,
+                                CLASS_NODE_LABEL,
+                                superClassUri,
+                                "RDFS:subClassOf"
+                            );
+                        }
+                    }
+                }
+
+                if (!this.eqp.isEmpty()) {
+                    // Create a visitor for extracting existential restrictions they can be seen as some sort of class
+                    // property.
+                    // http://www.w3.org/TR/2004/REC-owl-guide-20040210/#PropertyRestrictions
+                    RestrictionVisitor restrictionVisitor = new RestrictionVisitor();
+
+                    // Get all subclass axioms for the current class
+                    for (OWLSubClassOfAxiom axiom: this.ontology.getSubClassAxiomsForSubClass(c)) {
+                        // Get all superclasses based on the axiom, which includes superclasses based on existential
+                        // restrictions.
+                        OWLClassExpression superClass = axiom.getSuperClass();
+                        // Ask our superclass to accept a visit from the RestrictionVisitor
+                        superClass.accept(restrictionVisitor);
+                    }
+
+                    for (Tuple restriction: restrictionVisitor.getRestrictions()) {
+                        if (this.eqp.contains(restriction.x)) {
+                            superClassString = restriction.y.toString();
+                            superClassUri = this.extractUri(superClassString);
+                            superClassOntID = this.getOntID(superClassUri);
+
+                            createNode(
+                                CLASS_NODE_LABEL,
+                                superClassOntID,
+                                superClassUri
+                            );
+
+                            createRelationship(
+                                CLASS_NODE_LABEL,
+                                classUri,
+                                CLASS_NODE_LABEL,
+                                superClassUri,
+                                this.getOntID(this.extractUri(restriction.x.toString()))
+                            );
+                        }
                     }
                 }
 
@@ -348,7 +508,7 @@ public class Owl2Graph {
                             ecUri,
                             CLASS_NODE_LABEL,
                             classUri,
-                            "owl:equivalentClass"
+                            "OWL:equivalentClass"
                         );
                     }
 
@@ -522,7 +682,7 @@ public class Owl2Graph {
     private void storeLabel (OWLClass c, String classUri) {
         Label classLabel = this.getLabel(c, this.ontology);
 
-        if (StringUtils.isNotEmpty(classLabel.text)) {
+        if (StringUtils.isEmpty(classLabel.text)) {
             Set<OWLOntology> importedOntologies = this.ontology.getImports();
             for (OWLOntology ont: importedOntologies) {
                 classLabel = this.getLabel(c, ont);
@@ -577,26 +737,26 @@ public class Owl2Graph {
                     location.lastIndexOf("/"),
                     location.length() -1
                 );
-                System.out.println(
-                    "Transaction Sting: '" +
-                    this.transaction +
-                    "'"
-                );
             }
             if (this.verbose_output) {
                 System.out.println(
                     "Transaction initialized. Commit at " +
-                    location +
-                    " [Neo4J status:" +
-                    Integer.toString(response.getStatus()) +
-                    "]"
+                        location +
+                        " [Neo4J status:" +
+                        Integer.toString(response.getStatus()) +
+                        "]"
                 );
             }
+            checkForError(response);
         } catch (Exception e) {
-            print_error("Error starting transaction");
+            print_error("Error initiating transaction");
             print_error(e.getMessage());
             System.exit(1);
         }
+    }
+
+    private static void printVerboseLn (String text) {
+        System.out.println(ANSI_DIM + text + ANSI_RESET);
     }
 
     private void commitTransaction () {
@@ -604,7 +764,7 @@ public class Owl2Graph {
         try {
             HttpResponse<JsonNode> response = Unirest.post(
                 this.server_root_url + TRANSACTION_ENDPOINT + this.transaction + "/commit")
-                    .body("{\"statements\":[]}")
+                .body("{\"statements\":[]}")
                     .asJson();
             if (this.verbose_output) {
                 System.out.println(
@@ -613,16 +773,7 @@ public class Owl2Graph {
                     "]"
                 );
             }
-            JSONObject jsonResponse = response.getBody().getObject();
-            JSONArray errors = (JSONArray) jsonResponse.get("errors");
-            if (errors.length() > 0) {
-                JSONObject error = (JSONObject) errors.get(0);
-                String errorMsg = error.get("message").toString();
-                if (this.verbose_output) {
-                    errorMsg = response.getBody().toString();
-                }
-                throw new Exception(errorMsg);
-            }
+            checkForError(response);
         } catch (Exception e) {
             print_error("Error committing transaction");
             print_error(e.getMessage());
@@ -630,21 +781,47 @@ public class Owl2Graph {
         }
     }
 
+    private static void checkForError (HttpResponse<JsonNode> response) throws Exception {
+        JSONObject jsonResponse = response.getBody().getObject();
+        JSONArray errors = (JSONArray) jsonResponse.get("errors");
+        if (errors.length() > 0) {
+            JSONObject error = (JSONObject) errors.get(0);
+            String errorMsg = error.get("code").toString() + ": \"" + error.get("message").toString() + "\"";
+            throw new Exception(errorMsg);
+        }
+    }
+
     private void createNode (String classLabel, String classOntID, String classUri) {
         // Uniqueness for Class nodes needs to be defined before
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
+        String cql = "MERGE (n:`" + classLabel + "`:`" + this.ontology_acronym + "` {name:{classOntID}, uri:{classUri}});";
         try {
-            String cql = "MERGE (n:" + classLabel + ":" + this.ontology_acronym + " {name:'" + classOntID + "',uri:'" + classUri + "'});";
+            JsonObject json = Json.createObjectBuilder()
+                .add("statements", Json.createArrayBuilder()
+                        .add(Json.createObjectBuilder()
+                                .add("statement", cql)
+                                .add("parameters", Json.createObjectBuilder()
+                                        .add("classOntID", classOntID)
+                                        .add("classUri", classUri)
+                                )
+                        )
+                )
+                .build();
+
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                .body(json.toString())
                     .asJson();
+
             if (this.verbose_output) {
-                System.out.println("CQL: `" + cql + "` [Neo4J status:" + Integer.toString(response.getStatus()) + "]");
-                this.cqlLogger.info(cql);
+                System.out.println("CQL: " + json);
+                this.cqlLogger.info(json.toString());
             }
-        } catch (UnirestException e) {
+
+            checkForError(response);
+        } catch (Exception e) {
             print_error("Error creating a node");
+            print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -652,17 +829,33 @@ public class Owl2Graph {
 
     private void createRelationship (String srcLabel, String srcUri, String destLabel, String destUri, String relationship) {
         // Example: cypher/createRelationship.cql
+        String cql = "MATCH (src:`" + srcLabel + "` {uri:{srcUri}}), (dest:`" + destLabel + "` {uri:{destUri}}) MERGE (src)-[:`" + relationship + "`]->(dest);";
         try {
-            String cql = "MATCH (src:" + srcLabel + " {uri:'" + srcUri + "'}), (dest:" + destLabel + " {uri:'" + destUri + "'}) MERGE (src)-[:`" + relationship + "`]->(dest);";
+            JsonObject json = Json.createObjectBuilder()
+                .add("statements", Json.createArrayBuilder()
+                        .add(Json.createObjectBuilder()
+                                .add("statement", cql)
+                                .add("parameters", Json.createObjectBuilder()
+                                        .add("srcUri", srcUri)
+                                        .add("destUri", destUri)
+                                )
+                        )
+                )
+                .build();
+
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                    .body(json.toString())
                     .asJson();
+
             if (this.verbose_output) {
-                System.out.println("CQL: `" + cql + "`  [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
-                this.cqlLogger.info(cql);
+                System.out.println("CQL: " + json);
+                this.cqlLogger.info(json.toString());
             }
-        } catch (UnirestException e) {
+
+            checkForError(response);
+        } catch (Exception e) {
             print_error("Error creating a relationship");
+            print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -670,17 +863,33 @@ public class Owl2Graph {
 
     private void setProperty (String classLabel, String classUri, String propertyName, String propertyValue) {
         // Example: cypher/setProperty.cql
+        String cql = "MATCH (n:`" + classLabel + "` {uri:{classUri}}) SET n.`" + propertyName + "` = {propertyValue};";
         try {
-            String cql = "MATCH (n:" + classLabel + " {uri:'" + classUri + "'}) SET n.`" + propertyName + "` = '" + propertyValue + "';";
+            JsonObject json = Json.createObjectBuilder()
+                .add("statements", Json.createArrayBuilder()
+                    .add(Json.createObjectBuilder()
+                        .add("statement", cql)
+                        .add("parameters", Json.createObjectBuilder()
+                                .add("classUri", classUri)
+                            .add("propertyValue", propertyValue)
+                        )
+                    )
+                )
+                .build();
+
             HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body("{\"statements\":[{\"statement\":\"" + cql + "\"}]}")
+                    .body(json.toString())
                     .asJson();
+
             if (this.verbose_output) {
-                System.out.println("CQL: `" + cql + "` [Neo4J status: " + Integer.toString(response.getStatus()) + "]");
-                this.cqlLogger.info(cql);
+                System.out.println("CQL: " + json);
+                this.cqlLogger.info(json.toString());
             }
-        } catch (UnirestException e) {
+
+            checkForError(response);
+        } catch (Exception e) {
             print_error("Error creating a node property");
+            print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -688,6 +897,7 @@ public class Owl2Graph {
 
     /**
      * Command line parser
+     *
      * @param args
      */
     private void parseCommandLineArguments(String[] args)
@@ -748,9 +958,8 @@ public class Owl2Graph {
             .hasArg()
             .numberOfArgs(1)
             .type(String.class)
-            .required()
             .longOpt("server")
-            .desc("Neo4J server root URL")
+            .desc("Neo4J server root URL [Default: http://localhost:7474]")
             .build();
 
         Option user = Option.builder("u")
@@ -771,6 +980,15 @@ public class Owl2Graph {
             .desc("Neo4J user password")
             .build();
 
+        Option eqp = Option.builder()
+            .argName("String")
+            .hasArg()
+            .numberOfArgs(Option.UNLIMITED_VALUES)
+            .type(String.class)
+            .longOpt("eqp")
+            .desc("Existential quantification property (E.g. http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping)")
+            .build();
+
         all_options.addOption(help);
         all_options.addOption(version);
         all_options.addOption(verbosity);
@@ -780,6 +998,7 @@ public class Owl2Graph {
         all_options.addOption(server);
         all_options.addOption(user);
         all_options.addOption(password);
+        all_options.addOption(eqp);
 
         meta_options.addOption(help);
         meta_options.addOption(version);
@@ -791,6 +1010,7 @@ public class Owl2Graph {
         call_options.addOption(user);
         call_options.addOption(password);
         call_options.addOption(verbosity);
+        call_options.addOption(eqp);
 
         try {
             // Parse only for meta options, e.g. `-h` and `-v`
@@ -815,11 +1035,17 @@ public class Owl2Graph {
 
         try {
             cl = new DefaultParser().parse(call_options, args);
+
             this.path_to_owl = cl.getOptionValue("o");
-            this.server_root_url = cl.getOptionValue("s").substring(0, cl.getOptionValue("s").length() - (cl.getOptionValue("s").endsWith("/") ? 1 : 0));
             this.ontology_name = cl.getOptionValue("n");
-            this.ontology_acronym = cl.getOptionValue("a");
+            this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
+            this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
             this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
+
+            if (cl.hasOption("eqp")) {
+                this.eqps = new HashSet<>(Arrays.asList(cl.getOptionValues("eqp")));
+            }
+
             if (cl.hasOption("v")) {
                 this.verbose_output = true;
             }
