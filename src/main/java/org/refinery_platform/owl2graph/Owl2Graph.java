@@ -61,8 +61,8 @@ public class Owl2Graph {
     private String server_root_url;
     private String neo4j_authentication_header;
     private String transaction;
-    private Set<String> eqps;  // Existential quantification property strings
-    private Set<OWLObjectPropertyExpression> eqp;  // Existential quantification properties
+    private Set<String> eqps = new HashSet<>();  // Existential quantification property strings
+    private Set<OWLObjectPropertyExpression> eqp = new HashSet<>();  // Existential quantification properties
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
@@ -386,7 +386,6 @@ public class Owl2Graph {
             );
 
             if (!this.eqps.isEmpty()) {
-                this.eqp = new HashSet<>();
                 for (String property: this.eqps) {
                     this.eqp.add(this.datafactory.getOWLObjectProperty(IRI.create(property)));
                 }
