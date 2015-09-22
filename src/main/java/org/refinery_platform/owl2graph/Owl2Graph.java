@@ -78,8 +78,8 @@ public class Owl2Graph {
     public static final String ANSI_RESET = "\u001B[0m";
     public static final String ANSI_RED = "\u001B[31m";
     public static final String ANSI_GREEN = "\u001B[32m";
-    public static final String ANSI_YELLOW = "\u001B[33m";
     public static final String ANSI_DIM = "\u001B[2m";
+    public static final String ANSI_RESET_DIM = "\u001B[22m";
 
     public static final String VERSION = "0.3.1";
 
@@ -672,14 +672,10 @@ public class Owl2Graph {
             }
             checkForError(response);
         } catch (Exception e) {
-            print_error("Error initiating transaction");
+            print_error(ANSI_RESET_DIM + "Error initiating transaction");
             print_error(e.getMessage());
             System.exit(1);
         }
-    }
-
-    private static void printVerboseLn (String text) {
-        System.out.println(ANSI_DIM + text + ANSI_RESET);
     }
 
     private void commitTransaction () {
@@ -698,7 +694,7 @@ public class Owl2Graph {
             }
             checkForError(response);
         } catch (Exception e) {
-            print_error("Error committing transaction");
+            print_error(ANSI_RESET_DIM + "Error committing transaction");
             print_error(e.getMessage());
             System.exit(1);
         }
@@ -743,7 +739,7 @@ public class Owl2Graph {
 
             checkForError(response);
         } catch (Exception e) {
-            print_error("Error creating a node");
+            print_error(ANSI_RESET_DIM + "Error creating a node");
             print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
@@ -777,7 +773,7 @@ public class Owl2Graph {
 
             checkForError(response);
         } catch (Exception e) {
-            print_error("Error creating a relationship");
+            print_error(ANSI_RESET_DIM + "Error creating a relationship");
             print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
@@ -811,7 +807,7 @@ public class Owl2Graph {
 
             checkForError(response);
         } catch (Exception e) {
-            print_error("Error creating a node property");
+            print_error(ANSI_RESET_DIM + "Error creating a node property");
             print_error("CQL: " + cql);
             print_error(e.getMessage());
             System.exit(1);
