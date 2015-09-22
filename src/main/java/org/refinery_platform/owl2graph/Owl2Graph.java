@@ -81,7 +81,7 @@ public class Owl2Graph {
     public static final String ANSI_YELLOW = "\u001B[33m";
     public static final String ANSI_DIM = "\u001B[2m";
 
-    public static final String VERSION = "0.1.0";
+    public static final String VERSION = "0.3.1";
 
     // Inline class handling labels
     public class Label {
@@ -510,83 +510,6 @@ public class Owl2Graph {
                             classUri,
                             "OWL:equivalentClass"
                         );
-                    }
-
-                }
-
-                for (Node<OWLNamedIndividual> in: reasoner.getInstances(c, true)) {
-                    OWLNamedIndividual i = in.getRepresentativeElement();
-                    String indString = i.toString();
-                    String indUri = this.extractUri(indString);
-                    String indOntID = this.getOntID(indUri);
-
-                    createNode(
-                        INDIVIDUAL_NODE_LABEL,
-                        indOntID,
-                        indUri
-                    );
-                    createRelationship(
-                        INDIVIDUAL_NODE_LABEL,
-                        indUri,
-                        CLASS_NODE_LABEL,
-                        classUri,
-                        "rdf:type"
-                    );
-
-                    for (OWLObjectPropertyExpression objectProperty:
-                        ontology.getObjectPropertiesInSignature()) {
-                        for
-                        (org.semanticweb.owlapi.reasoner.Node<OWLNamedIndividual>
-                        object: reasoner.getObjectPropertyValues(i,
-                        objectProperty)) {
-                            // Get Relationship name
-                            String relString = objectProperty.toString();
-                            String relUri = this.extractUri(relString);
-                            String relOntID = this.getOntID(relUri);
-
-                            // Create a meta node for the potentially new Relationship
-                            createNode(
-                                RELATIONSHIP_NODE_LABEL,
-                                relOntID,
-                                relUri
-                            );
-
-                            // Get related Individual
-                            String relIndString = object.getRepresentativeElement().toString();
-                            String relIndUri = this.extractUri(relIndString);
-
-                            // Connect both individuals
-                            createRelationship(
-                                INDIVIDUAL_NODE_LABEL,
-                                indUri,
-                                INDIVIDUAL_NODE_LABEL,
-                                relIndUri,
-                                relOntID
-                            );
-                        }
-                    }
-                    for (OWLDataPropertyExpression dataProperty :
-                        ontology.getDataPropertiesInSignature()) {
-                        for (OWLLiteral object: reasoner.getDataPropertyValues(
-                            i, dataProperty.asOWLDataProperty())) {
-                            String propertyString =
-                                dataProperty.asOWLDataProperty().toString();
-                            String propertyUri = this.extractUri(propertyString);
-                            String propertyOntID = this.getOntID(propertyUri);
-                            String propertyValue = object.toString();
-
-                            createNode(
-                                PROPERTY_NODE_LABEL,
-                                propertyOntID,
-                                propertyUri
-                            );
-                            setProperty(
-                                INDIVIDUAL_NODE_LABEL,
-                                indUri,
-                                propertyOntID,
-                                propertyValue
-                            );
-                        }
                     }
                 }
             }
