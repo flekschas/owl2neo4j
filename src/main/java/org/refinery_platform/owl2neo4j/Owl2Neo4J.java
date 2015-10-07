@@ -70,6 +70,7 @@ public class Owl2Neo4J {
     private IRI documentIRI;
     private OWLDataFactory datafactory;
     private String ontUri;
+    private String versionIri;
 
     private Logger cqlLogger;
     private FileHandler fh;
@@ -298,12 +299,23 @@ public class Owl2Neo4J {
         parseCommandLineArguments(args);
     }
 
-    public void loadOntology() throws OWLException {
+    public void loadOntology() throws Exception {
         this.manager = OWLManager.createOWLOntologyManager();
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
         this.datafactory = OWLManager.getOWLDataFactory();
-        this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
+
+        try {
+            this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
+        } catch (NullPointerException e) {
+            throw new Exception("Ontology doesn't have a URI.");
+        }
+
+        try {
+            this.versionIri = this.ontology.getOntologyID().getVersionIRI().toString();
+        } catch (NullPointerException e) {
+            this.versionIri = null;
+        }
 
         // Get all ontologies being imported via `owl:import` including the _root_ ontology itself, i.e. the _root_
         // ontology refers to the ontology we are specified when calling this tool.
@@ -311,7 +323,8 @@ public class Owl2Neo4J {
 
         if (this.verbose_output) {
             System.out.println("Document IRI: " + documentIRI);
-            System.out.println("Ontology    : " + this.ontUri);
+            System.out.println("Ontology IRI: " + this.ontUri);
+            System.out.println("Version  IRI: " + this.versionIri);
         }
     }
 
@@ -348,7 +361,7 @@ public class Owl2Neo4J {
             }
         }
 
-        // This blog is heavily inspired by:
+        // This part was inspired by:
         // http://neo4j.com/blog/and-now-for-something-completely-different-using-owl-with-neo4j/
         try {
             initTransaction();
@@ -356,27 +369,32 @@ public class Owl2Neo4J {
             // Create a node for the ontology
             createNode(
                 ONTOLOGY_NODE_LABEL,
-                this.ontology_acronym,
+                this.ontology_name,
                 this.ontUri
             );
-            setProperty(
-                ONTOLOGY_NODE_LABEL,
-                this.ontUri,
-                "rdfs:label",
-                this.ontology_name
-            );
+
             setProperty(
                 ONTOLOGY_NODE_LABEL,
                 this.ontUri,
                 "acronym",
                 this.ontology_acronym
             );
+
             setProperty(
                 ONTOLOGY_NODE_LABEL,
                 this.ontUri,
                 "uri",
-                this.ontology.getOntologyID().getOntologyIRI().toString()
+                this.ontUri
             );
+
+            if (this.versionIri != null) {
+                setProperty(
+                    ONTOLOGY_NODE_LABEL,
+                    this.ontUri,
+                    "version",
+                    this.versionIri
+                );
+            }
 
             // Create root node "owl:Thing"
             createNode(
