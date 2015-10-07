@@ -215,7 +215,7 @@ public class Owl2Neo4J {
         }
 
         long loadTimeSec = -1;
-        double loadTimeMin = -1.0;
+        long loadTimeMin = -1;
 
         try {
             if (ont.verbose_output) {
@@ -227,13 +227,16 @@ public class Owl2Neo4J {
             long start = System.nanoTime();
             ont.loadOntology();
             long end = System.nanoTime();
-            loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             loadTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
+            loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start) - (60 * loadTimeMin);
 
             if (ont.verbose_output) {
                 System.out.println(ANSI_RESET + "Ontology loading... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
-                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+                System.out.println(
+                    ANSI_GREEN + "\u2713 " + ANSI_RESET +
+                        ANSI_DIM + "  ("  + loadTimeMin + " min and " + loadTimeSec + " sec)" + ANSI_RESET_DIM
+                );
             }
         } catch (Exception e) {
             print_error("Error loading the ontology");
@@ -242,7 +245,7 @@ public class Owl2Neo4J {
         }
 
         long importTimeSec = -1;
-        double importTimeMin = -1;
+        long importTimeMin = -1;
         try {
             if (ont.verbose_output) {
                 System.out.println("Importing ontology... " + ANSI_DIM);
@@ -253,13 +256,16 @@ public class Owl2Neo4J {
             long start = System.nanoTime();
             ont.importOntology();
             long end = System.nanoTime();
-            importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             importTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
+            importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start) - (60 * importTimeMin);
 
             if (ont.verbose_output) {
                 System.out.println(ANSI_RESET + "Importing ontology... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
-                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+                System.out.println(
+                    ANSI_GREEN + "\u2713" + ANSI_RESET +
+                        ANSI_DIM + "  (" + importTimeMin + " min and " + importTimeSec + " sec)" + ANSI_RESET_DIM
+                );
             }
         } catch (Exception e) {
             print_error("Error importing the ontology");
@@ -281,17 +287,17 @@ public class Owl2Neo4J {
             System.out.println("---");
             System.out.println(
                 "Load time:   " +
-                    Double.toString(loadTimeMin) +
-                    "min (" +
-                    Long.toString(loadTimeSec) +
-                    "s)"
+                    loadTimeMin +
+                    " min and" +
+                    loadTimeSec +
+                    " sec"
             );
             System.out.println(
                 "Import time: " +
-                    Double.toString(importTimeMin) +
-                    "min (" +
-                    Long.toString(importTimeSec) +
-                    "s)");
+                    importTimeMin +
+                    " min and" +
+                    importTimeSec +
+                    " sec");
         }
     }
 
