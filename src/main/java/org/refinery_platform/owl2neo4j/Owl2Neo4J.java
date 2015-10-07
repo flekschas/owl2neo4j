@@ -1,4 +1,4 @@
-package org.refinery_platform.owl2graph;
+package org.refinery_platform.owl2neo4j;
 
 /** OWL API */
 import org.semanticweb.owlapi.model.*;
@@ -37,7 +37,7 @@ import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
 
-public class Owl2Graph {
+public class Owl2Neo4J {
 
     private static String REST_ENDPOINT = "/db/data";
     private static String TRANSACTION_ENDPOINT = "/db/data/transaction";
@@ -156,7 +156,7 @@ public class Owl2Graph {
     }
 
     public static void main(String[] args) {
-        Owl2Graph ont = new Owl2Graph(args);
+        Owl2Neo4J ont = new Owl2Neo4J(args);
 
         Unirest.setDefaultHeader("Content-type", "application/json");
         Unirest.setDefaultHeader("Accept", "application/json; charset=UTF-8");
@@ -294,7 +294,7 @@ public class Owl2Graph {
         }
     }
 
-    public Owl2Graph(String[] args) {
+    public Owl2Neo4J(String[] args) {
         parseCommandLineArguments(args);
     }
 
