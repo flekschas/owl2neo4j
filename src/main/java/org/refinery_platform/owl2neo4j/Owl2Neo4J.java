@@ -1,4 +1,4 @@
-package org.refinery_platform.owl2graph;
+package org.refinery_platform.owl2neo4j;
 
 /** OWL API */
 import org.semanticweb.owlapi.model.*;
@@ -37,7 +37,7 @@ import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 
 
-public class Owl2Graph {
+public class Owl2Neo4J {
 
     private static String REST_ENDPOINT = "/db/data";
     private static String TRANSACTION_ENDPOINT = "/db/data/transaction";
@@ -70,6 +70,7 @@ public class Owl2Graph {
     private IRI documentIRI;
     private OWLDataFactory datafactory;
     private String ontUri;
+    private String versionIri;
 
     private Logger cqlLogger;
     private FileHandler fh;
@@ -81,7 +82,7 @@ public class Owl2Graph {
     public static final String ANSI_DIM = "\u001B[2m";
     public static final String ANSI_RESET_DIM = "\u001B[22m";
 
-    public static final String VERSION = "0.3.1";
+    public static final String VERSION = "0.3.2";
 
     // Inline class handling labels
     public class Label {
@@ -156,7 +157,7 @@ public class Owl2Graph {
     }
 
     public static void main(String[] args) {
-        Owl2Graph ont = new Owl2Graph(args);
+        Owl2Neo4J ont = new Owl2Neo4J(args);
 
         Unirest.setDefaultHeader("Content-type", "application/json");
         Unirest.setDefaultHeader("Accept", "application/json; charset=UTF-8");
@@ -214,7 +215,7 @@ public class Owl2Graph {
         }
 
         long loadTimeSec = -1;
-        double loadTimeMin = -1.0;
+        long loadTimeMin = -1;
 
         try {
             if (ont.verbose_output) {
@@ -226,13 +227,16 @@ public class Owl2Graph {
             long start = System.nanoTime();
             ont.loadOntology();
             long end = System.nanoTime();
-            loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             loadTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
+            loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start) - (60 * loadTimeMin);
 
             if (ont.verbose_output) {
                 System.out.println(ANSI_RESET + "Ontology loading... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
-                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+                System.out.println(
+                    ANSI_GREEN + "\u2713 " + ANSI_RESET +
+                        ANSI_DIM + "  ("  + loadTimeMin + " min and " + loadTimeSec + " sec)" + ANSI_RESET_DIM
+                );
             }
         } catch (Exception e) {
             print_error("Error loading the ontology");
@@ -241,7 +245,7 @@ public class Owl2Graph {
         }
 
         long importTimeSec = -1;
-        double importTimeMin = -1;
+        long importTimeMin = -1;
         try {
             if (ont.verbose_output) {
                 System.out.println("Importing ontology... " + ANSI_DIM);
@@ -252,13 +256,16 @@ public class Owl2Graph {
             long start = System.nanoTime();
             ont.importOntology();
             long end = System.nanoTime();
-            importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start);
             importTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
+            importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start) - (60 * importTimeMin);
 
             if (ont.verbose_output) {
                 System.out.println(ANSI_RESET + "Importing ontology... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
-                System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
+                System.out.println(
+                    ANSI_GREEN + "\u2713" + ANSI_RESET +
+                        ANSI_DIM + "  (" + importTimeMin + " min and " + importTimeSec + " sec)" + ANSI_RESET_DIM
+                );
             }
         } catch (Exception e) {
             print_error("Error importing the ontology");
@@ -280,30 +287,41 @@ public class Owl2Graph {
             System.out.println("---");
             System.out.println(
                 "Load time:   " +
-                    Double.toString(loadTimeMin) +
-                    "min (" +
-                    Long.toString(loadTimeSec) +
-                    "s)"
+                    loadTimeMin +
+                    " min and" +
+                    loadTimeSec +
+                    " sec"
             );
             System.out.println(
                 "Import time: " +
-                    Double.toString(importTimeMin) +
-                    "min (" +
-                    Long.toString(importTimeSec) +
-                    "s)");
+                    importTimeMin +
+                    " min and" +
+                    importTimeSec +
+                    " sec");
         }
     }
 
-    public Owl2Graph(String[] args) {
+    public Owl2Neo4J(String[] args) {
         parseCommandLineArguments(args);
     }
 
-    public void loadOntology() throws OWLException {
+    public void loadOntology() throws Exception {
         this.manager = OWLManager.createOWLOntologyManager();
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
         this.datafactory = OWLManager.getOWLDataFactory();
-        this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
+
+        try {
+            this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
+        } catch (NullPointerException e) {
+            throw new Exception("Ontology doesn't have a URI.");
+        }
+
+        try {
+            this.versionIri = this.ontology.getOntologyID().getVersionIRI().toString();
+        } catch (NullPointerException e) {
+            this.versionIri = null;
+        }
 
         // Get all ontologies being imported via `owl:import` including the _root_ ontology itself, i.e. the _root_
         // ontology refers to the ontology we are specified when calling this tool.
@@ -311,7 +329,8 @@ public class Owl2Graph {
 
         if (this.verbose_output) {
             System.out.println("Document IRI: " + documentIRI);
-            System.out.println("Ontology    : " + this.ontUri);
+            System.out.println("Ontology IRI: " + this.ontUri);
+            System.out.println("Version  IRI: " + this.versionIri);
         }
     }
 
@@ -348,7 +367,7 @@ public class Owl2Graph {
             }
         }
 
-        // This blog is heavily inspired by:
+        // This part was inspired by:
         // http://neo4j.com/blog/and-now-for-something-completely-different-using-owl-with-neo4j/
         try {
             initTransaction();
@@ -356,27 +375,32 @@ public class Owl2Graph {
             // Create a node for the ontology
             createNode(
                 ONTOLOGY_NODE_LABEL,
-                this.ontology_acronym,
+                this.ontology_name,
                 this.ontUri
             );
-            setProperty(
-                ONTOLOGY_NODE_LABEL,
-                this.ontUri,
-                "rdfs:label",
-                this.ontology_name
-            );
+
             setProperty(
                 ONTOLOGY_NODE_LABEL,
                 this.ontUri,
                 "acronym",
                 this.ontology_acronym
             );
+
             setProperty(
                 ONTOLOGY_NODE_LABEL,
                 this.ontUri,
                 "uri",
-                this.ontology.getOntologyID().getOntologyIRI().toString()
+                this.ontUri
             );
+
+            if (this.versionIri != null) {
+                setProperty(
+                    ONTOLOGY_NODE_LABEL,
+                    this.ontUri,
+                    "version",
+                    this.versionIri
+                );
+            }
 
             // Create root node "owl:Thing"
             createNode(

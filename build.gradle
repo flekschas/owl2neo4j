@@ -1,7 +1,7 @@
 apply plugin: 'java'
 apply plugin: 'idea'
 
-version = '0.3.1'
+version = '0.3.2'
 
 libsDirName = '../dist'
 
@@ -27,7 +27,7 @@ jar {
         configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
     }
     manifest {
-        attributes('Main-Class': 'org.refinery_platform.owl2graph.Owl2Graph',
+        attributes('Main-Class': 'org.refinery_platform.owl2neo4j.Owl2Neo4J',
                    'Implementation-Title': 'OWL 2 Neo4J',
                    'Implementation-Version': version)
     }
