@@ -42,7 +42,7 @@ public class Owl2Neo4J {
     private static String REST_ENDPOINT = "/db/data";
     private static String TRANSACTION_ENDPOINT = "/db/data/transaction";
 
-    public static String ROOT_ONTOLOGY = "owl";
+    public static String ROOT_ONTOLOGY = "OWL";
     public static String ROOT_CLASS = "Thing";
     public static String ROOT_CLASS_ONT_ID = ROOT_ONTOLOGY + ":" + ROOT_CLASS;
     public static String ROOT_CLASS_URI = "http://www.w3.org/2002/07/owl#" + ROOT_CLASS;
@@ -448,28 +448,37 @@ public class Owl2Neo4J {
                     // A node is a set of equivalent OWLClasses.
                     // http://owlapi.sourceforge.net/javadoc/org/semanticweb/owlapi/reasoner/Node.html
                     for (Node<OWLClass> superClassNode: superClassNodeSet) {
-                        // OWLClassExpression parent = parentOWLNode.getRepresentativeElement();
-
-                        // We iterate over all superclasses except unsatisfiable classes, e.g. owl:Nothing and other
-                        // classes equivalent to it.
-                        for (OWLClass superClass: superClassNode.getEntitiesMinusBottom()) {
-                            superClassString = superClass.toString();
-                            superClassUri = this.extractUri(superClassString);
-                            superClassOntID = this.getOntID(superClassUri);
-
-                            createNode(
-                                CLASS_NODE_LABEL,
-                                superClassOntID,
-                                superClassUri
-                            );
-
+                        if (superClassNode.isTopNode()) {
+                            // The top node represents owl:Thing and OWL classes equivalent to it.
                             createRelationship(
                                 CLASS_NODE_LABEL,
                                 classUri,
                                 CLASS_NODE_LABEL,
-                                superClassUri,
+                                ROOT_CLASS_URI,
                                 "RDFS:subClassOf"
                             );
+                        } else {
+                            // We iterate over all superclasses except unsatisfiable classes, e.g. owl:Nothing and other
+                            // classes equivalent to it.
+                            for (OWLClass superClass: superClassNode.getEntitiesMinusBottom()) {
+                                superClassString = superClass.toString();
+                                superClassUri = this.extractUri(superClassString);
+                                superClassOntID = this.getOntID(superClassUri);
+
+                                createNode(
+                                    CLASS_NODE_LABEL,
+                                    superClassOntID,
+                                    superClassUri
+                                );
+
+                                createRelationship(
+                                    CLASS_NODE_LABEL,
+                                    classUri,
+                                    CLASS_NODE_LABEL,
+                                    superClassUri,
+                                    "RDFS:subClassOf"
+                                );
+                            }
                         }
                     }
                 }
@@ -607,7 +616,7 @@ public class Owl2Neo4J {
             classOntID = classOntID.substring(underscorePos + 1);
         }
         if (idSpace.length() > 0) {
-            idSpace = idSpace + ":";
+            idSpace = idSpace.toUpperCase() + ":";
         }
         return idSpace + classOntID;
     }
