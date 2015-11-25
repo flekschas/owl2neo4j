@@ -746,7 +746,7 @@ public class Owl2Neo4J {
         // Uniqueness for Class nodes needs to be defined before
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
-        String cql = "MERGE (n:`" + classLabel + "`:`" + this.ontology_acronym + "` {name:{classOntID}, uri:{classUri}});";
+        String cql = "MERGE (n:`" + classLabel + "` {name:{classOntID}, uri:{classUri}});";
         JsonObject json = Json.createObjectBuilder()
             .add("statements", Json.createArrayBuilder()
                 .add(Json.createObjectBuilder()
@@ -754,6 +754,22 @@ public class Owl2Neo4J {
                     .add("parameters", Json.createObjectBuilder()
                         .add("classOntID", classOntID)
                         .add("classUri", classUri)
+                    )
+                )
+            )
+            .build();
+        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node");
+        setLabel(classLabel, "name", classUri, this.ontology_acronym);
+    }
+
+    private void setLabel (String classLabel, String key, String value, String newLabel) {
+        String cql = "MATCH (n:`" + classLabel + "` {" + key + ":{value}}) SET n :`" + newLabel + "`;";
+        JsonObject json = Json.createObjectBuilder()
+            .add("statements", Json.createArrayBuilder()
+                .add(Json.createObjectBuilder()
+                    .add("statement", cql)
+                    .add("parameters", Json.createObjectBuilder()
+                        .add("value", value)
                     )
                 )
             )
