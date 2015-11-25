@@ -747,90 +747,59 @@ public class Owl2Neo4J {
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
         String cql = "MERGE (n:`" + classLabel + "`:`" + this.ontology_acronym + "` {name:{classOntID}, uri:{classUri}});";
-        try {
-            JsonObject json = Json.createObjectBuilder()
-                .add("statements", Json.createArrayBuilder()
-                        .add(Json.createObjectBuilder()
-                                .add("statement", cql)
-                                .add("parameters", Json.createObjectBuilder()
-                                        .add("classOntID", classOntID)
-                                        .add("classUri", classUri)
-                                )
-                        )
+        JsonObject json = Json.createObjectBuilder()
+            .add("statements", Json.createArrayBuilder()
+                .add(Json.createObjectBuilder()
+                    .add("statement", cql)
+                    .add("parameters", Json.createObjectBuilder()
+                        .add("classOntID", classOntID)
+                        .add("classUri", classUri)
+                    )
                 )
-                .build();
-
-            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                .body(json.toString())
-                    .asJson();
-
-            if (this.verbose_output) {
-                System.out.println("CQL: " + json);
-                this.cqlLogger.info(json.toString());
-            }
-
-            checkForError(response);
-        } catch (Exception e) {
-            print_error(ANSI_RESET_DIM + "Error creating a node");
-            print_error("CQL: " + cql);
-            print_error(e.getMessage());
-            System.exit(1);
-        }
+            )
+            .build();
+        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node");
     }
 
     private void createRelationship (String srcLabel, String srcUri, String destLabel, String destUri, String relationship) {
         // Example: cypher/createRelationship.cql
         String cql = "MATCH (src:`" + srcLabel + "` {uri:{srcUri}}), (dest:`" + destLabel + "` {uri:{destUri}}) MERGE (src)-[:`" + relationship + "`]->(dest);";
-        try {
-            JsonObject json = Json.createObjectBuilder()
-                .add("statements", Json.createArrayBuilder()
-                        .add(Json.createObjectBuilder()
-                                .add("statement", cql)
-                                .add("parameters", Json.createObjectBuilder()
-                                        .add("srcUri", srcUri)
-                                        .add("destUri", destUri)
-                                )
-                        )
+        JsonObject json = Json.createObjectBuilder()
+            .add("statements", Json.createArrayBuilder()
+                .add(Json.createObjectBuilder()
+                    .add("statement", cql)
+                    .add("parameters", Json.createObjectBuilder()
+                        .add("srcUri", srcUri)
+                        .add("destUri", destUri)
+                    )
                 )
-                .build();
-
-            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body(json.toString())
-                    .asJson();
-
-            if (this.verbose_output) {
-                System.out.println("CQL: " + json);
-                this.cqlLogger.info(json.toString());
-            }
-
-            checkForError(response);
-        } catch (Exception e) {
-            print_error(ANSI_RESET_DIM + "Error creating a relationship");
-            print_error("CQL: " + cql);
-            print_error(e.getMessage());
-            System.exit(1);
-        }
+            )
+            .build();
+        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a relationship");
     }
 
     private void setProperty (String classLabel, String classUri, String propertyName, String propertyValue) {
         // Example: cypher/setProperty.cql
         String cql = "MATCH (n:`" + classLabel + "` {uri:{classUri}}) SET n.`" + propertyName + "` = {propertyValue};";
-        try {
-            JsonObject json = Json.createObjectBuilder()
-                .add("statements", Json.createArrayBuilder()
-                    .add(Json.createObjectBuilder()
-                        .add("statement", cql)
-                        .add("parameters", Json.createObjectBuilder()
-                                .add("classUri", classUri)
-                            .add("propertyValue", propertyValue)
-                        )
+        JsonObject json = Json.createObjectBuilder()
+            .add("statements", Json.createArrayBuilder()
+                .add(Json.createObjectBuilder()
+                    .add("statement", cql)
+                    .add("parameters", Json.createObjectBuilder()
+                        .add("classUri", classUri)
+                        .add("propertyValue", propertyValue)
                     )
                 )
-                .build();
+            )
+            .build();
+        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node property");
+    }
 
-            HttpResponse<JsonNode> response = Unirest.post(this.server_root_url + TRANSACTION_ENDPOINT + this.transaction)
-                    .body(json.toString())
-                    .asJson();
+    private void queryNeo4J (JsonObject json, String url, String errorTitle) {
+        try {
+            HttpResponse<JsonNode> response = Unirest.post(url)
+                .body(json.toString())
+                .asJson();
 
             if (this.verbose_output) {
                 System.out.println("CQL: " + json);
@@ -839,8 +808,8 @@ public class Owl2Neo4J {
 
             checkForError(response);
         } catch (Exception e) {
-            print_error(ANSI_RESET_DIM + "Error creating a node property");
-            print_error("CQL: " + cql);
+            print_error(ANSI_RESET_DIM + errorTitle);
+            print_error("CQL: " + json);
             print_error(e.getMessage());
             System.exit(1);
         }
