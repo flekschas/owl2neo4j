@@ -774,7 +774,7 @@ public class Owl2Neo4J {
                 )
             )
             .build();
-        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node");
+        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a label");
     }
 
     private void createRelationship (String srcLabel, String srcUri, String destLabel, String destUri, String relationship) {
