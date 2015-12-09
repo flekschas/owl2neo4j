@@ -82,7 +82,7 @@ public class Owl2Neo4J {
     public static final String ANSI_DIM = "\u001B[2m";
     public static final String ANSI_RESET_DIM = "\u001B[22m";
 
-    public static final String VERSION = "0.3.3";
+    public static final String VERSION = "0.3.4";
 
     // Inline class handling labels
     public class Label {
@@ -774,7 +774,7 @@ public class Owl2Neo4J {
                 )
             )
             .build();
-        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node");
+        queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a label");
     }
 
     private void createRelationship (String srcLabel, String srcUri, String destLabel, String destUri, String relationship) {
