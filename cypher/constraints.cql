@@ -8,15 +8,12 @@
 // Schema: <Ontology Abbreviation>:<Ontology ID>
 // E.g.: owl:thing
 
+CREATE INDEX on :Class(name);
 CREATE CONSTRAINT on (n:Class) ASSERT n.uri IS UNIQUE;
 
-CREATE CONSTRAINT on (n:Individual) ASSERT n.uri IS UNIQUE;
-
+CREATE CONSTRAINT on (n:Ontology) ASSERT n.acronym IS UNIQUE;
 CREATE CONSTRAINT on (n:Ontology) ASSERT n.uri IS UNIQUE;
-CREATE CONSTRAINT on (n:Ontology) ASSERT n.name IS UNIQUE;
 
-CREATE CONSTRAINT on (n:Relationship) ASSERT n.uri IS UNIQUE;
-CREATE CONSTRAINT on (n:Relationship) ASSERT n.name IS UNIQUE;
+CREATE CONSTRAINT on (n:User) ASSERT n.id IS UNIQUE;
 
-CREATE CONSTRAINT on (n:Property) ASSERT n.uri IS UNIQUE;
-CREATE CONSTRAINT on (n:Property) ASSERT n.name IS UNIQUE;
+CREATE CONSTRAINT on (n:DataSet) ASSERT n.id IS UNIQUE;
