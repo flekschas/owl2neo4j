@@ -759,7 +759,7 @@ public class Owl2Neo4J {
             )
             .build();
         queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node");
-        setLabel(classLabel, "name", classUri, this.ontology_acronym);
+        setLabel(classLabel, "uri", classUri, this.ontology_acronym);
     }
 
     private void setLabel (String classLabel, String key, String value, String newLabel) {
