@@ -1,6 +1,7 @@
 package org.refinery_platform.owl2neo4j;
 
 /** OWL API */
+import org.json.JSONTokener;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.apibinding.OWLManager;
@@ -26,6 +27,7 @@ import org.json.JSONArray;
 import javax.json.Json;
 import javax.json.JsonObject;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -35,6 +37,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
+import java.io.FileReader;
+import java.util.Iterator;
+
+import org.apache.commons.io.FilenameUtils;
 
 
 public class Owl2Neo4J {
@@ -55,6 +61,7 @@ public class Owl2Neo4J {
     private static String RELATIONSHIP_NODE_LABEL = "Relationship";
     private static String PROPERTY_NODE_LABEL = "Property";
 
+    private String path_to_batch;
     private String path_to_owl;
     private String ontology_name;
     private String ontology_acronym;
@@ -82,7 +89,7 @@ public class Owl2Neo4J {
     public static final String ANSI_DIM = "\u001B[2m";
     public static final String ANSI_RESET_DIM = "\u001B[22m";
 
-    public static final String VERSION = "0.3.4";
+    public static final String VERSION = "0.4.0";
 
     // Inline class handling labels
     public class Label {
@@ -157,7 +164,93 @@ public class Owl2Neo4J {
     }
 
     public static void main(String[] args) {
-        Owl2Neo4J ont = new Owl2Neo4J(args);
+        Owl2Neo4J ontParser = new Owl2Neo4J(args);
+
+        long startImport = System.nanoTime();
+        long endImport = System.nanoTime();
+
+        if (StringUtils.isBlank(ontParser.path_to_batch)) {
+            ontParser.checkServer();
+            ontParser.importOntologies();
+        } else {
+            JSONArray ontologies = new JSONArray();
+            JSONObject jsonObject = new JSONObject();
+            String basePath = FilenameUtils.getFullPath(ontParser.path_to_batch);
+
+            // Read JSON file
+            try {
+                FileReader reader = new FileReader(ontParser.path_to_batch);
+
+                JSONTokener jsonTokener = new JSONTokener(reader);
+                jsonObject = new JSONObject(jsonTokener);
+
+                ontologies = jsonObject.getJSONArray("ontologies");
+
+            } catch (Exception e) {
+                print_error("Error loading JSON file.");
+                print_error(e.getMessage());
+                System.exit(1);
+            }
+
+            // Read global properties
+            try {
+                if (jsonObject.has("server")) {
+                    ontParser.server_root_url = jsonObject.getString("server");
+                }
+            } catch (Exception e) {
+                print_error("Error extracting global settings.");
+            }
+
+            ontParser.checkServer();
+
+            // Loop over ontologies to be imported and import them
+            try {
+                for (int i = 0; i < ontologies.length(); i++) {
+                    ontParser.path_to_owl = new File(basePath, ontologies.getJSONObject(i).getString("o")).getPath();
+                    ontParser.ontology_name = ontologies.getJSONObject(i).getString("n");
+                    ontParser.ontology_acronym = ontologies.getJSONObject(i).getString("a").toUpperCase();
+                    ontParser.importOntologies();
+                }
+            }  catch (Exception e) {
+                print_error("Error during batch import");
+                print_error(e.getMessage());
+                System.exit(1);
+            }
+        }
+
+        long totalImportSec = TimeUnit.NANOSECONDS.toMinutes(endImport - startImport);
+        long totalImportMin = TimeUnit.NANOSECONDS.toSeconds(endImport - startImport);
+
+        // Unirest has be closed explicitly
+        try {
+            Unirest.shutdown();
+        } catch (Exception e) {
+            print_error("Error shutting down Unirest");
+            print_error(e.getMessage());
+            System.exit(1);
+        }
+
+        // Print some performance related numbers
+        if (ontParser.verbose_output) {
+            System.out.println("---");
+            System.out.println(
+                "Total import time:   " +
+                    totalImportMin +
+                    " min and" +
+                    totalImportSec +
+                    " sec"
+            );
+        }
+    }
+
+    public Owl2Neo4J(String[] args) {
+        parseCommandLineArguments(args);
+    }
+
+    public void checkServer() {
+        if (StringUtils.isBlank(this.server_root_url)) {
+            this.server_root_url = "http://localhost:7474";
+        }
 
         Unirest.setDefaultHeader("Content-type", "application/json");
         Unirest.setDefaultHeader("Accept", "application/json; charset=UTF-8");
@@ -165,23 +258,23 @@ public class Owl2Neo4J {
         // http://neo4j.com/docs/stable/rest-api-streaming.html
         Unirest.setDefaultHeader("X-Stream", "true");
         Unirest.setDefaultHeader(
-            "Authorization", ont.neo4j_authentication_header
+            "Authorization", this.neo4j_authentication_header
         );
 
         // Test if server is available
         try {
-            if (ont.verbose_output) {
-                System.out.println("Checking availability of Neo4J... " + ANSI_DIM);
+            if (this.verbose_output) {
+                System.out.println("Checking Neo4J at " + this.server_root_url + "... " + ANSI_DIM);
             } else {
-                System.out.print("Checking availability of Neo4J... ");
+                System.out.print("Checking Neo4J at " + this.server_root_url + "... ");
             }
 
             HttpResponse<JsonNode> response = Unirest.get(
-                ont.server_root_url
+                this.server_root_url
             ).asJson();
 
-            if (ont.verbose_output) {
-                System.out.println(ANSI_RESET + "Checking availability of Neo4J... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            if (this.verbose_output) {
+                System.out.println(ANSI_RESET + "Checking Neo4J at " + this.server_root_url + "... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
                 System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
             }
@@ -193,17 +286,17 @@ public class Owl2Neo4J {
 
         // Try authentication
         try {
-            if (ont.verbose_output) {
+            if (this.verbose_output) {
                 System.out.println("Checking credentials for Neo4J... " + ANSI_DIM);
             } else {
                 System.out.print("Checking credentials for Neo4J... ");
             }
 
             HttpResponse<JsonNode> response = Unirest.get(
-                ont.server_root_url + REST_ENDPOINT
+                this.server_root_url + REST_ENDPOINT
             ).asJson();
 
-            if (ont.verbose_output) {
+            if (this.verbose_output) {
                 System.out.println(ANSI_RESET + "Checking credentials for Neo4J... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
                 System.out.println(ANSI_GREEN + "\u2713" + ANSI_RESET);
@@ -213,25 +306,27 @@ public class Owl2Neo4J {
             print_error(e.getMessage());
             System.exit(1);
         }
+    }
 
+    public void importOntologies() {
         long loadTimeSec = -1;
         long loadTimeMin = -1;
 
         try {
-            if (ont.verbose_output) {
-                System.out.println("Ontology loading... " + ANSI_DIM);
+            if (this.verbose_output) {
+                System.out.println("Loading " + this.ontology_acronym + "... " + ANSI_DIM);
             } else {
-                System.out.print("Ontology loading... ");
+                System.out.print("Loading " + this.ontology_acronym + "... ");
             }
 
             long start = System.nanoTime();
-            ont.loadOntology();
+            this.loadOntology();
             long end = System.nanoTime();
             loadTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
             loadTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start) - (60 * loadTimeMin);
 
-            if (ont.verbose_output) {
-                System.out.println(ANSI_RESET + "Ontology loading... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            if (this.verbose_output) {
+                System.out.println(ANSI_RESET + "Loading " + this.ontology_acronym + "... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
                 System.out.println(
                     ANSI_GREEN + "\u2713 " + ANSI_RESET +
@@ -247,20 +342,20 @@ public class Owl2Neo4J {
         long importTimeSec = -1;
         long importTimeMin = -1;
         try {
-            if (ont.verbose_output) {
-                System.out.println("Importing ontology... " + ANSI_DIM);
+            if (this.verbose_output) {
+                System.out.println("Importing " + this.ontology_acronym + "... " + ANSI_DIM);
             } else {
-                System.out.print("Importing ontology... ");
+                System.out.print("Importing " + this.ontology_acronym + "... ");
             }
 
             long start = System.nanoTime();
-            ont.importOntology();
+            this.importOntology();
             long end = System.nanoTime();
             importTimeMin = TimeUnit.NANOSECONDS.toMinutes(end - start);
             importTimeSec = TimeUnit.NANOSECONDS.toSeconds(end - start) - (60 * importTimeMin);
 
-            if (ont.verbose_output) {
-                System.out.println(ANSI_RESET + "Importing ontology... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
+            if (this.verbose_output) {
+                System.out.println(ANSI_RESET + "Importing " + this.ontology_acronym + "... " + ANSI_GREEN + "\u2713" + ANSI_RESET);
             } else {
                 System.out.println(
                     ANSI_GREEN + "\u2713" + ANSI_RESET +
@@ -272,37 +367,6 @@ public class Owl2Neo4J {
             print_error(e.getMessage());
             System.exit(1);
         }
-
-        // Unirest has be closed explicitly
-        try {
-            Unirest.shutdown();
-        } catch (Exception e) {
-            print_error("Error shutting down Unirest");
-            print_error(e.getMessage());
-            System.exit(1);
-        }
-
-        // Print some performance related numbers
-        if (ont.verbose_output) {
-            System.out.println("---");
-            System.out.println(
-                "Load time:   " +
-                    loadTimeMin +
-                    " min and" +
-                    loadTimeSec +
-                    " sec"
-            );
-            System.out.println(
-                "Import time: " +
-                    importTimeMin +
-                    " min and" +
-                    importTimeSec +
-                    " sec");
-        }
-    }
-
-    public Owl2Neo4J(String[] args) {
-        parseCommandLineArguments(args);
     }
 
     public void loadOntology() throws Exception {
@@ -637,7 +701,7 @@ public class Owl2Neo4J {
     private void storeLabel (OWLClass c, String classUri) {
         Label classLabel = this.getLabel(c, this.ontology);
 
-        if (StringUtils.isEmpty(classLabel.text)) {
+        if (StringUtils.isBlank(classLabel.text)) {
             Set<OWLOntology> importedOntologies = this.ontology.getImports();
             for (OWLOntology ont: importedOntologies) {
                 classLabel = this.getLabel(c, ont);
@@ -647,7 +711,7 @@ public class Owl2Neo4J {
             }
         }
 
-        if (StringUtils.isNotEmpty(classLabel.text)) {
+        if (StringUtils.isNotBlank(classLabel.text)) {
             setProperty(
                 CLASS_NODE_LABEL,
                 classUri,
@@ -656,7 +720,7 @@ public class Owl2Neo4J {
             );
         }
 
-        if (StringUtils.isNotEmpty(classLabel.lang)) {
+        if (StringUtils.isNoneBlank(classLabel.lang)) {
             setProperty(
                 CLASS_NODE_LABEL,
                 classUri,
@@ -746,13 +810,12 @@ public class Owl2Neo4J {
         // Uniqueness for Class nodes needs to be defined before
         // Look: cypher/constraints.cql
         // Example: cypher/createClass.cql
-        String cql = "MERGE (n:`" + classLabel + "` {name:{classOntID}, uri:{classUri}});";
+        String cql = "MERGE (n:`" + classLabel + "` {uri:{classUri}});";
         JsonObject json = Json.createObjectBuilder()
             .add("statements", Json.createArrayBuilder()
                 .add(Json.createObjectBuilder()
                     .add("statement", cql)
                     .add("parameters", Json.createObjectBuilder()
-                        .add("classOntID", classOntID)
                         .add("classUri", classUri)
                     )
                 )
@@ -760,6 +823,7 @@ public class Owl2Neo4J {
             .build();
         queryNeo4J(json, this.server_root_url + TRANSACTION_ENDPOINT + this.transaction, "Error creating a node");
         setLabel(classLabel, "uri", classUri, this.ontology_acronym);
+        setProperty(classLabel, classUri, "name", classOntID);
     }
 
     private void setLabel (String classLabel, String key, String value, String newLabel) {
@@ -842,7 +906,9 @@ public class Owl2Neo4J {
 
         Options meta_options = new Options();
         Options call_options = new Options();
+        Options batch_options = new Options();
         Options all_options = new Options();
+
 
         Option help = Option.builder("h")
             .longOpt("help")
@@ -925,6 +991,16 @@ public class Owl2Neo4J {
             .desc("Existential quantification property (E.g. http://www.co-ode.org/ontologies/pizza/pizza.owl#hasTopping)")
             .build();
 
+        Option batch = Option.builder("b")
+            .argName("Path")
+            .hasArg()
+            .numberOfArgs(1)
+            .type(String.class)
+            .required()
+            .longOpt("batch")
+            .desc("Path to JSON file")
+            .build();
+
         all_options.addOption(help);
         all_options.addOption(version);
         all_options.addOption(verbosity);
@@ -935,6 +1011,7 @@ public class Owl2Neo4J {
         all_options.addOption(user);
         all_options.addOption(password);
         all_options.addOption(eqp);
+        all_options.addOption(batch);
 
         meta_options.addOption(help);
         meta_options.addOption(version);
@@ -947,6 +1024,9 @@ public class Owl2Neo4J {
         call_options.addOption(password);
         call_options.addOption(verbosity);
         call_options.addOption(eqp);
+
+        batch_options.addOption(batch);
+        batch_options.addOption(verbosity);
 
         try {
             // Parse only for meta options, e.g. `-h` and `-v`
@@ -969,28 +1049,46 @@ public class Owl2Neo4J {
             System.exit(1);
         }
 
+        boolean batchImport;
+
         try {
-            cl = new DefaultParser().parse(call_options, args);
+            // Parse only for batch options, e.g. `-b`
+            cl = new DefaultParser().parse(batch_options, args, true);
 
-            this.path_to_owl = cl.getOptionValue("o");
-            this.ontology_name = cl.getOptionValue("n");
-            this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
-            this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
-            this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
-
-            if (cl.hasOption("eqp")) {
-                this.eqps = new HashSet<>(Arrays.asList(cl.getOptionValues("eqp")));
-            }
+            this.path_to_batch = cl.getOptionValue("b");
 
             if (cl.hasOption("v")) {
                 this.verbose_output = true;
             }
+            batchImport = true;
         }  catch (ParseException e) {
-            print_error("Error parsing command line call options");
-            print_error(e.getMessage());
-            System.out.println("\n");
-            usage(all_options);
-            System.exit(1);
+            batchImport = false;
+        }
+
+        if (!batchImport) {
+            try {
+                cl = new DefaultParser().parse(call_options, args);
+
+                this.path_to_owl = cl.getOptionValue("o");
+                this.ontology_name = cl.getOptionValue("n");
+                this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
+                this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
+                this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
+
+                if (cl.hasOption("eqp")) {
+                    this.eqps = new HashSet<>(Arrays.asList(cl.getOptionValues("eqp")));
+                }
+
+                if (cl.hasOption("v")) {
+                    this.verbose_output = true;
+                }
+            } catch (ParseException e) {
+                print_error("Error parsing command line call options");
+                print_error(e.getMessage());
+                System.out.println("\n");
+                usage(all_options);
+                System.exit(1);
+            }
         }
     }
 
