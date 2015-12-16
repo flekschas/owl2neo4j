@@ -32,7 +32,6 @@ $ java -jar ./dist/owl2neo4j.jar -o pizza.owl -n "Pizza Ontology" -a pizza
 In order to import multiple ontologies at once create a JSON file:
 
 ```
-// ./import.json
 {
 	"server": "http://my-server:7474",
     "ontologies": [
@@ -55,11 +54,14 @@ In order to import multiple ontologies at once create a JSON file:
 }
 ```
 
-and then run Owl2Neo4J with option `b`:
+`o`, `n` and `a` correspond to the options. The only difference is that n, i.e. the pat to the OWL file to be imported, should be relative to the JSON file. `server` is optional; when it's not defined, the default server url, i.e. `http://127.0.0.1:7474`, is used.
+Next you can import the everything with the following call:
 
 ```
 $ java -jar ./dist/owl2neo4j.jar -b ./import.json
 ```
+
+(Assuming that the file above is `./import.json`.)
 
 **Command line options**:
 
