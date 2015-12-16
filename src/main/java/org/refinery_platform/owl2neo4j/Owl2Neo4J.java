@@ -89,7 +89,7 @@ public class Owl2Neo4J {
     public static final String ANSI_DIM = "\u001B[2m";
     public static final String ANSI_RESET_DIM = "\u001B[22m";
 
-    public static final String VERSION = "0.3.5";
+    public static final String VERSION = "0.4.0";
 
     // Inline class handling labels
     public class Label {
