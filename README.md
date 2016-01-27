@@ -32,7 +32,6 @@ $ java -jar ./dist/owl2neo4j.jar -o pizza.owl -n "Pizza Ontology" -a pizza
 In order to import multiple ontologies at once create a JSON file:
 
 ```
-// ./import.json
 {
 	"server": "http://my-server:7474",
     "ontologies": [
@@ -44,7 +43,8 @@ In order to import multiple ontologies at once create a JSON file:
         {
             "o": "./cl.owl",
             "n": "Cell Ontology",
-            "a": "CL"
+            "a": "CL",
+            "i": true
         },
         {
             "o": "./efo.owl",
@@ -55,18 +55,21 @@ In order to import multiple ontologies at once create a JSON file:
 }
 ```
 
-and then run Owl2Neo4J with option `b`:
+`a`, `i`, `n` and `o` correspond to the CLI options. The only difference is that n, i.e. the path to the OWL file to be imported, should be relative to the JSON file. `server` is optional; when it's not defined, the default server url, i.e. `http://127.0.0.1:7474`, is used.
+Next you can import the everything with the following call:
 
 ```
 $ java -jar ./dist/owl2neo4j.jar -b ./import.json
 ```
 
+(Assuming that the file above is `./import.json`.)
+
 **Command line options**:
 
 ```
 usage: java -jar owl2neo4j.jar -a <String> -b <Path> [--eqp <String>] [-h]
-	   -n <String> -o <Path> [-p <String>] [-s <URL>] [-u <String>] [-v]
-       [--version]
+       [-i] -n <String> -o <Path> [-p <String>] [-s <URL>] [-u <String>]
+       [-v] [--version]
 Import OWL into Neo4J as a labeled property graph.
 
  -a,--abbreviation <String>   Ontology abbreviation (E.g. go)
@@ -75,6 +78,7 @@ Import OWL into Neo4J as a labeled property graph.
                               http://www.co-ode.org/ontologies/pizza/pizza
                               .owl#hasTopping)
  -h,--help                    Shows this help
+ -i,--incl-imports            Include import closure
  -n,--name <String>           Ontology name (E.g. Gene Ontology)
  -o,--owl <Path>              Path to OWL file
  -p,--password <String>       Neo4J user password

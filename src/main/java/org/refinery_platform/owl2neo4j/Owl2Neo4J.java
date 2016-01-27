@@ -70,6 +70,7 @@ public class Owl2Neo4J {
     private String transaction;
     private Set<String> eqps = new HashSet<>();  // Existential quantification property strings
     private Set<OWLObjectPropertyExpression> eqp = new HashSet<>();  // Existential quantification properties
+    private Boolean include_import_closure = false;
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
@@ -209,6 +210,11 @@ public class Owl2Neo4J {
                     ontParser.path_to_owl = new File(basePath, ontologies.getJSONObject(i).getString("o")).getPath();
                     ontParser.ontology_name = ontologies.getJSONObject(i).getString("n");
                     ontParser.ontology_acronym = ontologies.getJSONObject(i).getString("a").toUpperCase();
+                    if (ontologies.getJSONObject(i).has("i")) {
+                        ontParser.include_import_closure = ontologies.getJSONObject(i).getBoolean("i");
+                    } else {
+                        ontParser.include_import_closure = false;
+                    }
                     ontParser.importOntologies();
                 }
             }  catch (Exception e) {
@@ -421,7 +427,7 @@ public class Owl2Neo4J {
         this.cqlLogger = Logger.getLogger("Cypher:" + this.ontology_acronym);
         if (this.verbose_output) {
             try {
-                // Create at most five 10MB logger.
+                // Create at most five 10MB log files.
                 this.fh = new FileHandler("Cypher log for " + this.ontology_acronym + ".log", 10485760, 5);
                 this.cqlLogger.addHandler(fh);
                 SimpleFormatter formatter = new SimpleFormatter();
@@ -479,7 +485,7 @@ public class Owl2Neo4J {
                 }
             }
 
-            for (OWLClass c: this.ontology.getClassesInSignature()) {
+            for (OWLClass c: this.ontology.getClassesInSignature(this.include_import_closure)) {
                 // Skip unsatisfiable classes like `owl:Nothing`.
                 if (!reasoner.isSatisfiable(c)) {
                     continue;
@@ -1001,6 +1007,11 @@ public class Owl2Neo4J {
             .desc("Path to JSON file")
             .build();
 
+        Option includeOwlImports = Option.builder("i")
+            .longOpt("incl-imports")
+            .desc("Include import closure")
+            .build();
+
         all_options.addOption(help);
         all_options.addOption(version);
         all_options.addOption(verbosity);
@@ -1012,6 +1023,7 @@ public class Owl2Neo4J {
         all_options.addOption(password);
         all_options.addOption(eqp);
         all_options.addOption(batch);
+        all_options.addOption(includeOwlImports);
 
         meta_options.addOption(help);
         meta_options.addOption(version);
@@ -1024,6 +1036,7 @@ public class Owl2Neo4J {
         call_options.addOption(password);
         call_options.addOption(verbosity);
         call_options.addOption(eqp);
+        call_options.addOption(includeOwlImports);
 
         batch_options.addOption(batch);
         batch_options.addOption(verbosity);
@@ -1072,6 +1085,7 @@ public class Owl2Neo4J {
                 this.path_to_owl = cl.getOptionValue("o");
                 this.ontology_name = cl.getOptionValue("n");
                 this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
+                this.include_import_closure = cl.hasOption("i");
                 this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
                 this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
 
