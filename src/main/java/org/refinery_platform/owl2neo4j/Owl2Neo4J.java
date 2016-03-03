@@ -72,6 +72,7 @@ public class Owl2Neo4J {
     private Set<String> eqps = new HashSet<>();  // Existential quantification property strings
     private Set<OWLObjectPropertyExpression> eqp = new HashSet<>();  // Existential quantification properties
     private Boolean include_import_closure = false;
+    private Boolean no_local_owl_files = false;
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
@@ -395,11 +396,13 @@ public class Owl2Neo4J {
             throw new Exception("The option `-o` doesn't point to a file.");
         }
 
-        this.manager.addIRIMapper(
-            new AutoIRIMapper(
-                ontFilePath.getParent().resolve("imports").toFile(), false
-            )
-        );
+        if (!this.no_local_owl_files) {
+            this.manager.addIRIMapper(
+                new AutoIRIMapper(
+                    ontFilePath.getParent().toFile(), true
+                )
+            );
+        }
 
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = this.manager.loadOntologyFromOntologyDocument(documentIRI);
@@ -1027,6 +1030,11 @@ public class Owl2Neo4J {
             .desc("Include import closure")
             .build();
 
+        Option noLocalOntologies = Option.builder("l")
+            .longOpt("no-local")
+            .desc("Don't scan for locally available OWL files to ensure loading remote files.")
+            .build();
+
         all_options.addOption(help);
         all_options.addOption(version);
         all_options.addOption(verbosity);
@@ -1039,6 +1047,7 @@ public class Owl2Neo4J {
         all_options.addOption(eqp);
         all_options.addOption(batch);
         all_options.addOption(includeOwlImports);
+        all_options.addOption(noLocalOntologies);
 
         meta_options.addOption(help);
         meta_options.addOption(version);
@@ -1052,6 +1061,7 @@ public class Owl2Neo4J {
         call_options.addOption(verbosity);
         call_options.addOption(eqp);
         call_options.addOption(includeOwlImports);
+        call_options.addOption(noLocalOntologies);
 
         batch_options.addOption(batch);
         batch_options.addOption(verbosity);
@@ -1101,6 +1111,7 @@ public class Owl2Neo4J {
                 this.ontology_name = cl.getOptionValue("n");
                 this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
                 this.include_import_closure = cl.hasOption("i");
+                this.no_local_owl_files = cl.hasOption("l");
                 this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
                 this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
 
