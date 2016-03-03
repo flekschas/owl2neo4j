@@ -75,9 +75,8 @@ public class Owl2Neo4J {
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
-    private Set<OWLOntology> ontologies;
     private IRI documentIRI;
-    private OWLDataFactory datafactory;
+    private OWLDataFactory dataFactory;
     private String ontUri;
     private String versionIri;
 
@@ -405,7 +404,7 @@ public class Owl2Neo4J {
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
         this.ontology = this.manager.loadOntologyFromOntologyDocument(documentIRI);
 
-        this.datafactory = OWLManager.getOWLDataFactory();
+        this.dataFactory = OWLManager.getOWLDataFactory();
 
         try {
             this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
@@ -418,10 +417,6 @@ public class Owl2Neo4J {
         } catch (NullPointerException e) {
             this.versionIri = null;
         }
-
-        // Get all ontologies being imported via `owl:import` including the _root_ ontology itself, i.e. the _root_
-        // ontology refers to the ontology we are specified when calling this tool.
-        this.ontologies = this.ontology.getImportsClosure();
 
         if (this.verbose_output) {
             System.out.println("Document IRI: " + documentIRI);
@@ -503,7 +498,7 @@ public class Owl2Neo4J {
 
             if (!this.eqps.isEmpty()) {
                 for (String property: this.eqps) {
-                    this.eqp.add(this.datafactory.getOWLObjectProperty(IRI.create(property)));
+                    this.eqp.add(this.dataFactory.getOWLObjectProperty(IRI.create(property)));
                 }
             }
 
@@ -715,7 +710,7 @@ public class Owl2Neo4J {
 
     private Label getLabel (OWLClass c, OWLOntology ont) {
         Label classLabel = new Label(null, null);
-        for (OWLAnnotation annotation : c.getAnnotations(ont, this.datafactory.getRDFSLabel())) {
+        for (OWLAnnotation annotation : c.getAnnotations(ont, this.dataFactory.getRDFSLabel())) {
             if (annotation.getValue() instanceof OWLLiteral) {
                 OWLLiteral val = (OWLLiteral) annotation.getValue();
 
