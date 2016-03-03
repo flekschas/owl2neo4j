@@ -68,8 +68,8 @@ $ java -jar ./dist/owl2neo4j.jar -b ./import.json
 
 ```
 usage: java -jar owl2neo4j.jar -a <String> -b <Path> [--eqp <String>] [-h]
-       [-i] -n <String> -o <Path> [-p <String>] [-s <URL>] [-u <String>]
-       [-v] [--version]
+       [-i] [-l] -n <String> -o <Path> [-p <String>] [-s <URL>] [-u
+       <String>] [-v] [--version]
 Import OWL into Neo4J as a labeled property graph.
 
  -a,--abbreviation <String>   Ontology abbreviation (E.g. go)
@@ -79,6 +79,8 @@ Import OWL into Neo4J as a labeled property graph.
                               .owl#hasTopping)
  -h,--help                    Shows this help
  -i,--incl-imports            Include import closure
+ -l,--no-local                Don't scan for locally available OWL files
+                              to ensure loading remote files.
  -n,--name <String>           Ontology name (E.g. Gene Ontology)
  -o,--owl <Path>              Path to OWL file
  -p,--password <String>       Neo4J user password

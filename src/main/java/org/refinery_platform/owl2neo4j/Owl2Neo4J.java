@@ -5,6 +5,7 @@ import org.json.JSONTokener;
 import org.semanticweb.owlapi.model.*;
 import org.semanticweb.owlapi.reasoner.*;
 import org.semanticweb.owlapi.apibinding.OWLManager;
+import org.semanticweb.owlapi.util.AutoIRIMapper;
 import org.semanticweb.owlapi.util.OWLClassExpressionVisitorAdapter;
 
 /** Reasoner */
@@ -29,19 +30,19 @@ import javax.json.JsonObject;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.Set;
-import java.util.Collections;
+import java.nio.file.DirectoryStream;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
 import java.io.FileReader;
-import java.util.Iterator;
 
 import org.apache.commons.io.FilenameUtils;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 public class Owl2Neo4J {
 
@@ -71,12 +72,12 @@ public class Owl2Neo4J {
     private Set<String> eqps = new HashSet<>();  // Existential quantification property strings
     private Set<OWLObjectPropertyExpression> eqp = new HashSet<>();  // Existential quantification properties
     private Boolean include_import_closure = false;
+    private Boolean no_local_owl_files = false;
 
     private OWLOntologyManager manager;
     private OWLOntology ontology;
-    private Set<OWLOntology> ontologies;
     private IRI documentIRI;
-    private OWLDataFactory datafactory;
+    private OWLDataFactory dataFactory;
     private String ontUri;
     private String versionIri;
 
@@ -91,6 +92,18 @@ public class Owl2Neo4J {
     public static final String ANSI_RESET_DIM = "\u001B[22m";
 
     public static final String VERSION = "0.5.0";
+
+    public static List<String> fileList (String directory, String fileExt) {
+        List<String> fileNames = new ArrayList<>();
+        try (DirectoryStream<Path> directoryStream = Files.newDirectoryStream(Paths.get(directory))) {
+            for (Path path : directoryStream) {
+                if (FilenameUtils.isExtension(path.getFileName().toString(), fileExt)) {
+                    fileNames.add(path.toString());
+                }
+            }
+        } catch (IOException ex) {}
+        return fileNames;
+    }
 
     // Inline class handling labels
     public class Label {
@@ -275,7 +288,7 @@ public class Owl2Neo4J {
                 System.out.print("Checking Neo4J at " + this.server_root_url + "... ");
             }
 
-            HttpResponse<JsonNode> response = Unirest.get(
+            Unirest.get(
                 this.server_root_url
             ).asJson();
 
@@ -298,7 +311,7 @@ public class Owl2Neo4J {
                 System.out.print("Checking credentials for Neo4J... ");
             }
 
-            HttpResponse<JsonNode> response = Unirest.get(
+            Unirest.get(
                 this.server_root_url + REST_ENDPOINT
             ).asJson();
 
@@ -315,8 +328,8 @@ public class Owl2Neo4J {
     }
 
     public void importOntologies() {
-        long loadTimeSec = -1;
-        long loadTimeMin = -1;
+        long loadTimeSec;
+        long loadTimeMin;
 
         try {
             if (this.verbose_output) {
@@ -345,8 +358,8 @@ public class Owl2Neo4J {
             System.exit(1);
         }
 
-        long importTimeSec = -1;
-        long importTimeMin = -1;
+        long importTimeSec;
+        long importTimeMin;
         try {
             if (this.verbose_output) {
                 System.out.println("Importing " + this.ontology_acronym + "... " + ANSI_DIM);
@@ -377,9 +390,24 @@ public class Owl2Neo4J {
 
     public void loadOntology() throws Exception {
         this.manager = OWLManager.createOWLOntologyManager();
+
+        Path ontFilePath = Paths.get(this.path_to_owl);
+        if (Files.notExists(ontFilePath)) {
+            throw new Exception("The option `-o` doesn't point to a file.");
+        }
+
+        if (!this.no_local_owl_files) {
+            this.manager.addIRIMapper(
+                new AutoIRIMapper(
+                    ontFilePath.getParent().toFile(), true
+                )
+            );
+        }
+
         this.documentIRI = IRI.create("file:" + this.path_to_owl);
-        this.ontology = manager.loadOntologyFromOntologyDocument(documentIRI);
-        this.datafactory = OWLManager.getOWLDataFactory();
+        this.ontology = this.manager.loadOntologyFromOntologyDocument(documentIRI);
+
+        this.dataFactory = OWLManager.getOWLDataFactory();
 
         try {
             this.ontUri = this.ontology.getOntologyID().getOntologyIRI().toString();
@@ -392,10 +420,6 @@ public class Owl2Neo4J {
         } catch (NullPointerException e) {
             this.versionIri = null;
         }
-
-        // Get all ontologies being imported via `owl:import` including the _root_ ontology itself, i.e. the _root_
-        // ontology refers to the ontology we are specified when calling this tool.
-        this.ontologies = this.ontology.getImportsClosure();
 
         if (this.verbose_output) {
             System.out.println("Document IRI: " + documentIRI);
@@ -418,10 +442,6 @@ public class Owl2Neo4J {
         }
         OWLReasoner reasoner = reasonerFactory.createReasoner(this.ontology, config);
         reasoner.precomputeInferences();
-
-        if (!reasoner.isConsistent()) {
-            throw new Exception("Ontology is inconsistent!");
-        }
 
         // Init Cypher logger
         this.cqlLogger = Logger.getLogger("Cypher:" + this.ontology_acronym);
@@ -481,7 +501,7 @@ public class Owl2Neo4J {
 
             if (!this.eqps.isEmpty()) {
                 for (String property: this.eqps) {
-                    this.eqp.add(this.datafactory.getOWLObjectProperty(IRI.create(property)));
+                    this.eqp.add(this.dataFactory.getOWLObjectProperty(IRI.create(property)));
                 }
             }
 
@@ -693,7 +713,7 @@ public class Owl2Neo4J {
 
     private Label getLabel (OWLClass c, OWLOntology ont) {
         Label classLabel = new Label(null, null);
-        for (OWLAnnotation annotation : c.getAnnotations(ont, this.datafactory.getRDFSLabel())) {
+        for (OWLAnnotation annotation : c.getAnnotations(ont, this.dataFactory.getRDFSLabel())) {
             if (annotation.getValue() instanceof OWLLiteral) {
                 OWLLiteral val = (OWLLiteral) annotation.getValue();
 
@@ -903,8 +923,6 @@ public class Owl2Neo4J {
 
     /**
      * Command line parser
-     *
-     * @param args
      */
     private void parseCommandLineArguments(String[] args)
     {
@@ -1012,6 +1030,11 @@ public class Owl2Neo4J {
             .desc("Include import closure")
             .build();
 
+        Option noLocalOntologies = Option.builder("l")
+            .longOpt("no-local")
+            .desc("Don't scan for locally available OWL files to ensure loading remote files.")
+            .build();
+
         all_options.addOption(help);
         all_options.addOption(version);
         all_options.addOption(verbosity);
@@ -1024,6 +1047,7 @@ public class Owl2Neo4J {
         all_options.addOption(eqp);
         all_options.addOption(batch);
         all_options.addOption(includeOwlImports);
+        all_options.addOption(noLocalOntologies);
 
         meta_options.addOption(help);
         meta_options.addOption(version);
@@ -1037,6 +1061,7 @@ public class Owl2Neo4J {
         call_options.addOption(verbosity);
         call_options.addOption(eqp);
         call_options.addOption(includeOwlImports);
+        call_options.addOption(noLocalOntologies);
 
         batch_options.addOption(batch);
         batch_options.addOption(verbosity);
@@ -1086,6 +1111,7 @@ public class Owl2Neo4J {
                 this.ontology_name = cl.getOptionValue("n");
                 this.ontology_acronym = cl.getOptionValue("a").toUpperCase();
                 this.include_import_closure = cl.hasOption("i");
+                this.no_local_owl_files = cl.hasOption("l");
                 this.server_root_url = cl.getOptionValue("s", "http://localhost:7474");
                 this.neo4j_authentication_header = "Basic: " + Base64.encodeBase64String((cl.getOptionValue("u") + ":" + cl.getOptionValue("p")).getBytes());
 
