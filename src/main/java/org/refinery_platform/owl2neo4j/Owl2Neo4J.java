@@ -399,7 +399,7 @@ public class Owl2Neo4J {
         if (!this.no_local_owl_files) {
             this.manager.addIRIMapper(
                 new AutoIRIMapper(
-                    ontFilePath.getParent().toFile(), true
+                    ontFilePath.getParent().toAbsolutePath().normalize().toFile(), true
                 )
             );
         }
