@@ -36,6 +36,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.FileHandler;
 import java.util.logging.Logger;
 import java.util.logging.SimpleFormatter;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.lang.Runnable;
 import java.io.FileReader;
 
 import org.apache.commons.io.FilenameUtils;
@@ -91,7 +94,7 @@ public class Owl2Neo4J {
     public static final String ANSI_DIM = "\u001B[2m";
     public static final String ANSI_RESET_DIM = "\u001B[22m";
 
-    public static final String VERSION = "0.6.1";
+    public static final String VERSION = "0.7.0";
 
     public static List<String> fileList (String directory, String fileExt) {
         List<String> fileNames = new ArrayList<>();
@@ -505,6 +508,9 @@ public class Owl2Neo4J {
                 }
             }
 
+            boolean firstTime = true;
+            ExecutorService aliveKeeper = null;
+
             for (OWLClass c: this.ontology.getClassesInSignature(this.include_import_closure)) {
                 // Skip unsatisfiable classes like `owl:Nothing`.
                 if (!reasoner.isSatisfiable(c)) {
@@ -523,10 +529,31 @@ public class Owl2Neo4J {
 
                 this.storeLabel(c, classUri);
 
+                if (firstTime) {
+                    aliveKeeper = keepTransactionAlive(
+                        this.server_root_url + TRANSACTION_ENDPOINT + this.transaction,
+                        150,
+                        this.verbose_output
+                    );
+                }
+
                 // A node set is a set of nodes.
                 NodeSet<OWLClass> superClassNodeSet = reasoner.getSuperClasses(c, true);
 
+                if (firstTime && aliveKeeper != null) {
+                    try {
+                        closeTransactionAliveKeeper(aliveKeeper, this.verbose_output);
+                    } catch (Exception e) {
+                        print_error("Couldn't shut down alive keeper");
+                        print_error(e.getMessage());
+                        System.exit(1);
+                    }
+                    firstTime = false;
+                }
+
                 if (superClassNodeSet.isEmpty()) {
+                    // When the set of superclasses is empty we relate the current Node to OWL:Thing.
+                    // This avoids subtrees with a root node other than OWL:Thing.
                     createRelationship(
                         CLASS_NODE_LABEL,
                         classUri,
@@ -819,6 +846,61 @@ public class Owl2Neo4J {
             print_error(ANSI_RESET_DIM + "Error committing transaction");
             print_error(e.getMessage());
             System.exit(1);
+        }
+    }
+
+    private ExecutorService keepTransactionAlive (final String url, final int interval, final boolean verbose) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        executor.submit(new Runnable() {
+            @Override
+            public void run() {
+                boolean looping = true;
+                while (looping) {
+                    // Fire empty statement to keep transaction alive
+                    try {
+                        TimeUnit.SECONDS.sleep(interval);
+                        HttpResponse<JsonNode> response = Unirest.post(url)
+                            .body("{\"statements\":[]}")
+                            .asJson();
+                        if (verbose) {
+                            System.out.println(
+                                "Pinging transaction. [Neo4J status:" +
+                                    Integer.toString(response.getStatus()) +
+                                    "]"
+                            );
+                        }
+                    } catch (InterruptedException e) {
+                        if (verbose) {
+                            System.out.println("Stop alive keeper");
+                        }
+                        looping = false;
+                    } catch (Exception e) {
+                        print_error(ANSI_RESET_DIM + "Error keeping transaction alive");
+                        print_error(e.getMessage());
+                        System.exit(1);
+                    }
+                }
+            }
+        });
+
+        return executor;
+    }
+
+    private void closeTransactionAliveKeeper (ExecutorService executor, boolean verbose) {
+        try {
+            executor.shutdown();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+        catch (InterruptedException e) {
+            if (verbose) {
+                System.out.println("Alive keeper interrupted");
+            }
+        }
+        finally {
+            if (verbose) {
+                System.out.println("Force shutdown alive keeper");
+            }
+            executor.shutdownNow();
         }
     }
 
