@@ -104,6 +104,14 @@ java -jar -DentityExpansionLimit=1000000 ./dist/owl2neo4j.jar -o extra-large-piz
 
 Be sure that you have enough RAM to theoretical load _1000000_ (or any other number), otherwise your system will complain.
 
+**Handshake error**:
+
+In case you see a _handshake_ error of this form `Remote host closed connection during handshake` add the following parameter when calling java:
+
+```
+java -jar -Dhttps.protocols=TLSv1.1,TLSv1.2 ...
+```
+
 [gradle]:https://gradle.org/
 [jre7]:http://www.oracle.com/technetwork/java/javase/downloads/jre7-downloads-1880261.html
 [neo4j]:http://neo4j.com/
