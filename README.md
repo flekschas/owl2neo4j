@@ -27,7 +27,7 @@ gradle build
 A single file import is executed as follows:
 
 ```
-java -jar ./dist/owl2neo4j.jar -o pizza.owl -n "Pizza Ontology" -a pizza
+java -jar ./dist/owl2neo4j.jar -o ./pizza.owl -n "Pizza Ontology" -a pizza
 ```
 
 In order to import multiple ontologies at once create a JSON file:
@@ -99,7 +99,7 @@ For detailed instructions and help regarding the different options please refer 
 By default the OWLAPI XML loader has a 64,000 triple limit. To increase the limit and being able to import larger ontologies start `owl2neo4j.jar` with `DentityExpansionLimit=<LARGE_NUMBER>` flag like so:
 
 ```
-java -jar -DentityExpansionLimit=1000000 ./dist/owl2neo4j.jar -o extra-large-pizza.owl -n "Extra Large Pizza Ontology" -a elpo
+java -jar -DentityExpansionLimit=1000000 ./dist/owl2neo4j.jar -o ./extra-large-pizza.owl -n "Extra Large Pizza Ontology" -a elpo
 ```
 
 Be sure that you have enough RAM to theoretical load _1000000_ (or any other number), otherwise your system will complain.
