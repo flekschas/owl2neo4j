@@ -1204,6 +1204,10 @@ public class Owl2Neo4J {
                 if (cl.hasOption("v")) {
                     this.verbose_output = true;
                 }
+
+                if (!this.path_to_owl.startsWith("/") || !this.path_to_owl.startsWith("./")) {
+                    this.path_to_owl = "./" + this.path_to_owl;
+                }
             } catch (ParseException e) {
                 print_error("Error parsing command line call options");
                 print_error(e.getMessage());
@@ -1229,6 +1233,6 @@ public class Owl2Neo4J {
      * Prints error message in red.
      */
     public static void print_error(String message) {
-        System.err.println(ANSI_RED + message + ANSI_RESET);
+        System.err.println(ANSI_RESET_DIM + ANSI_RED + message + ANSI_RESET);
     }
 }

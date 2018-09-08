@@ -10,7 +10,7 @@ Each release comes with a precompiled JAR, created automatically by Travis-CI. T
 
 **Requirements**:
 
-* [Java RE 7](jre7)
+* [Java RE 7](jre7) or [Java RE 8](jre8)
 * [Gradle](gradle)
 
 ```
@@ -27,8 +27,10 @@ gradle build
 A single file import is executed as follows:
 
 ```
-java -jar ./dist/owl2neo4j.jar -o pizza.owl -n "Pizza Ontology" -a pizza
+java -jar ./dist/owl2neo4j.jar -o ./pizza.owl -n "Pizza Ontology" -a pizza
 ```
+
+(To get `pizza.owl` run `curl -O https://protege.stanford.edu/ontologies/pizza/pizza.owl`.)
 
 In order to import multiple ontologies at once create a JSON file:
 
@@ -114,5 +116,6 @@ java -jar -Dhttps.protocols=TLSv1.1,TLSv1.2 ...
 
 [gradle]:https://gradle.org/
 [jre7]:http://www.oracle.com/technetwork/java/javase/downloads/jre7-downloads-1880261.html
+[jre8]:http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html
 [neo4j]:http://neo4j.com/
 [owl]:www.w3.org/2004/OWL/
