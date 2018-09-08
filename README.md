@@ -10,7 +10,7 @@ Each release comes with a precompiled JAR, created automatically by Travis-CI. T
 
 **Requirements**:
 
-* [Java RE 7](jre7) or [Java RE 8](jre8)
+* [Java 7](jre7) or [Java 8](jre8) or [Java 11](jdk11)
 * [Gradle](gradle)
 
 ```
@@ -117,5 +117,6 @@ java -jar -Dhttps.protocols=TLSv1.1,TLSv1.2 ...
 [gradle]:https://gradle.org/
 [jre7]:http://www.oracle.com/technetwork/java/javase/downloads/jre7-downloads-1880261.html
 [jre8]:http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html
+[jre11]:http://jdk.java.net/11/
 [neo4j]:http://neo4j.com/
 [owl]:www.w3.org/2004/OWL/
