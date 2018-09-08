@@ -184,7 +184,6 @@ public class Owl2Neo4J {
         Owl2Neo4J ontParser = new Owl2Neo4J(args);
 
         long startImport = System.nanoTime();
-        long endImport = System.nanoTime();
 
         if (StringUtils.isBlank(ontParser.path_to_batch)) {
             ontParser.checkServer();
@@ -240,8 +239,10 @@ public class Owl2Neo4J {
             }
         }
 
-        long totalImportSec = TimeUnit.NANOSECONDS.toMinutes(endImport - startImport);
-        long totalImportMin = TimeUnit.NANOSECONDS.toSeconds(endImport - startImport);
+        long endImport = System.nanoTime();
+
+        long totalImportMin = TimeUnit.NANOSECONDS.toMinutes(endImport - startImport);
+        long totalImportSec = TimeUnit.NANOSECONDS.toSeconds(endImport - startImport);
 
         // Unirest has be closed explicitly
         try {
@@ -258,7 +259,7 @@ public class Owl2Neo4J {
             System.out.println(
                 "Total import time:   " +
                     totalImportMin +
-                    " min and" +
+                    " min and " +
                     totalImportSec +
                     " sec"
             );
