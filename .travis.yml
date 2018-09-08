@@ -5,12 +5,13 @@ branches:
   - develop
   - "/^v.*$/"
 before_deploy:
-  - ./gradlew build
+- "./gradlew build"
 deploy:
-  - provider: releases
-    api_key:
-      secure: "Qcw7FvnWxZDV9xw1rDbKj3B7dXxYKSxTOVLqMZPgTKxnU3hVrWykVnj3ipx2+hSHu1KbKw1Gd5DZVSccuEPeeJiGRwH8h2nLmo4WGAaVplhUmawuzwJhhwimxU+K8O1dywRMC7kERdVNRjeIga/hcFl/vum5+esWyrQS3KFoPGluG2QK75i2u4MrQ7d/J9VhQbp9vmZ3Q7NzZ8UnLDY7hTV2+LegVjpxh7Kzy8mG2wAgiKScv/hazcvUjIHUdXGKdtjYTIL0uGv3l+4o9Nmm7gZ8S1CHGVxmP0a+bQUxXf+7FpBztlQp7ocaw3wU+2FcaKeDf7C+L42mIJx2LeQ6eoHNIF1F7ldeg8O6KfrEPtj97ql/GUMx5XzFIborbYd+jTLo7NvmyDExBSR5EOc2kYbpic31+NZlWMjnDJQq/bcWZ9P0TASaeJvgA8h8OJWfEGNjptsf9u5KbDrLYjE8L9GjvJz4nFCHOY/gKmyB2nDFbiR/AQWLzfiuyBTRuSKQGk8CB3tQVSLU3Ax8RQlJz94DXy9pWl4jE/RtKyN1N96aOj8kKtANAPcl9g4Nfv81zf870UDbVh90q4PCnUUG2c9RuEzViZMclJSDc0+r4MV+JVeQA88yUzGJRRzsm3D9RGTFQ/+CoD3jfeoztm9fctKTE4ZmfPZtqyNJRSIpZdw="
-    file: "dist/owl2neo4j.jar"
-    skip_cleanup: true
-    on:
-      tags: true
+  provider: releases
+  api_key:
+    secure: H0f9l7MDjjn2pbwsyrJbeFL8SSn4daYb9hz/+gdoFwTo8C7btC2b9tiQH6wH3R+V51pTDC75XXFQUg7F1Tjd973yLPDZXASTm9j3LF0l79MsJJDnvL8oOoj8h+VOqN8hpkc87jUTNmYfKqwNzXt2+Iy+kqzABGoU+njZ13KWuq9XLVmEZPGqXrU6Xj1UG5tdt6j0UO7IdwUY7ux585huO23SwjUPE45sVh8SYT9K7bW0NGT7o0GecMZL+WGwld9wNIuQ/bDMNbGYzq1a+aT0EXDZRtHTlicUxslHBzFoRvq8VRPAEs7X81mSwy2ghYUzvtj/w0UCM9DzKWbTaATFluf9aGxemvTWhRk5qTh0PoZ4HICg31nSTEjzhDR/Us6XaysuDfC//2o+HLKz68pjfVM3zJZh8RN8Th9oISNPEnAukEFCRvuUN0QPw1Bui6fiKuI+vNczXcC4JAlSvj9c8z/dh+I3gZ+gHVXMpU0WjT3wWwU72l5nFBgz37TuUxWEQYMEMftu4ikGX+i8MsrUM0KKGj2XIBIWSWyqGx+zUZ3BsyTixALD0e9DRcx2U1+rD3b8pl3f5OdVd1Ln/0tzanX2Gpk8/exUBTstJMqDMCkgsju1FjAId15HDYtsgHwsPxvEClCNaoidbd+HxGZ+Z18X9YbdX4yb2dHqb0zRogU=
+  file: dist/owl2neo4j.jar
+  skip_cleanup: true
+  on:
+    repo: flekschas/owl2neo4j
+    tags: true
