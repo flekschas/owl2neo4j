@@ -19,8 +19,11 @@ Thumbs.db
 
 # User specific #
 #################
-.editorconfig
 *.log*
 /owl2neo4j
 /reasoner comparison/
 /dist/
+
+# Example data #
+################
+*.owl
